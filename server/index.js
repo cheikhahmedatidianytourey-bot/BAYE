@@ -3,6 +3,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 
 const app = express();
+app.set('trust proxy', 1); // Render proxy
 app.disable('x-powered-by');
 app.use(express.json({limit:'20kb'}));
 const allowedOrigin = process.env.BAYE_ORIGIN || 'https://baye-app.onrender.com';

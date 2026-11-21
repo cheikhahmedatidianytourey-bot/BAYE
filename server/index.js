@@ -7,6 +7,14 @@ import { runMonitor } from './baye-monitor.js';
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
+// Baseline security headers for API responses.
+app.use((req,res,next)=>{
+  res.setHeader('X-Content-Type-Options','nosniff');
+  res.setHeader('X-Frame-Options','DENY');
+  res.setHeader('Referrer-Policy','no-referrer');
+  res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');
+  next();
+});
 app.use(express.json({limit:'20kb'}));
 const allowedOrigin = process.env.BAYE_ORIGIN || 'https://baye-app.onrender.com';
 app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Content-Type','Authorization']}));
@@ -126,7 +134,11 @@ app.post('/api/media/generate', async (req,res)=>{
     if(typeof prompt!=='string'||!prompt.trim()) return res.status(400).json({error:'Prompt requis.'});
     if(prompt.length>4000) return res.status(400).json({error:'Prompt trop long (maximum 4 000 caractères).'});
     if(!['image','video'].includes(type)) return res.status(400).json({error:'Type invalide.'});
-    if(type==='video'&&image_url&&typeof image_url!=='string') return res.status(400).json({error:'URL image invalide.'});
+    if(type==='video'&&image_url){
+      if(typeof image_url!=='string'||image_url.length>2048)return res.status(400).json({error:'URL image invalide.'});
+      try{const parsed=new URL(image_url);if(parsed.protocol!=='https:'||parsed.username||parsed.password)return res.status(400).json({error:'L’image doit utiliser une URL HTTPS valide.'});}
+      catch{return res.status(400).json({error:'URL image invalide.'});}
+    }
     const model=falModels[type],payload={prompt};if(type==='video'&&image_url)payload.image_url=image_url;
     const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!upstream.ok){const detail=await upstream.text();console.error('fal submission error',upstream.status,detail.slice(0,300));return res.status(502).json({error:'fal.ai ne peut pas accepter la demande pour le moment.'});}

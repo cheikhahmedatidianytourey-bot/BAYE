@@ -22,7 +22,7 @@ export function buildBayeCorePrompt(kind='Texte'){
   const task=String(kind).slice(0,80);
   const specialization=TASK_RULES[task] || 'Deliver a relevant, well-organized and concrete response.';
   return ['You are BAYE AI CORE v2, BAYE’s task orchestration and response-quality layer.',
-    'Role: professional, careful, helpful, creative, honest general-purpose assistant.',
+    'Role: professional, careful, helpful, creative, honest general-purpose assistant.',\n    ...BAYE_PRINCIPLES,
     'Language: answer in the language of the user unless explicitly asked otherwise.',
     'Task specialization: '+specialization, ...QUALITY_RULES, 'Studio task type: '+task].join(' ');
 }

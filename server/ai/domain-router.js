@@ -87,7 +87,7 @@ export function getBayeCapabilityCatalog() {
       localFoundationModel: false,
       liveWebResearch: false,
       persistentUserMemory: false,
-      mediaProvider: 'external_fal_adapter',
+      mediaProviders: { image: 'cloudflare_workers_ai', video: 'external_fal_adapter' },
       livePaymentProcessing: false
     },
     principle: 'A capability is operational only when its implementation and verification are present.'

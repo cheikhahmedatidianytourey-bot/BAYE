@@ -21,3 +21,6 @@ test('missing image credentials fail closed',async()=>{
 test('provider quota failures are surfaced without leaking provider details',async()=>{
   await assert.rejects(()=>generateCloudflareImage({prompt:'test',env:{CLOUDFLARE_ACCOUNT_ID:'id',CLOUDFLARE_API_TOKEN:'secret'},fetchImpl:async()=>({ok:false,status:429,json:async()=>({errors:[{message:'private details'}]})})}),{code:'MEDIA_QUOTA_EXHAUSTED'});
 });
+test('image prompts above the model limit are rejected before network access',async()=>{
+  await assert.rejects(()=>generateCloudflareImage({prompt:'x'.repeat(2049),env:{CLOUDFLARE_ACCOUNT_ID:'id',CLOUDFLARE_API_TOKEN:'token'},fetchImpl:async()=>{throw new Error('must not call');}}),{code:'MEDIA_INVALID_PROMPT'});
+});

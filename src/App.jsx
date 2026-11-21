@@ -1,5 +1,6 @@
 import React,{useState} from 'react';
-const kinds=['Texte','Idée de projet','Plan','Code','Message'];\nconst LOGO=<svg viewBox='0 0 240 100' className='bayeLogo' aria-label='Logo BAYE'><path d='M10 42 H100 L120 5 L140 42 H230 Q207 76 120 95 Q33 76 10 42Z' fill='none' stroke='currentColor' strokeWidth='5' strokeLinejoin='round'/><path d='M100 42 L120 95 L140 42' fill='none' stroke='currentColor' strokeWidth='5' strokeLinejoin='round'/></svg>;
+const kinds=['Texte','Idée de projet','Plan','Code','Message'];
+const LOGO=<svg viewBox='0 0 240 100' className='bayeLogo' aria-label='Logo BAYE'><path d='M10 42 H100 L120 5 L140 42 H230 Q207 76 120 95 Q33 76 10 42Z' fill='none' stroke='currentColor' strokeWidth='5' strokeLinejoin='round'/><path d='M100 42 L120 95 L140 42' fill='none' stroke='currentColor' strokeWidth='5' strokeLinejoin='round'/></svg>;
 const API='https://baye-ai-gateway.onrender.com/api/generate';
 export default function App(){
  const [tab,setTab]=useState('Accueil'),[mediaType,setMediaType]=useState('image'),[mediaPrompt,setMediaPrompt]=useState(''),[mediaId,setMediaId]=useState(''),[mediaStatus,setMediaStatus]=useState(''),[mediaResult,setMediaResult]=useState(null),[mediaBusy,setMediaBusy]=useState(false),[kind,setKind]=useState('Texte'),[prompt,setPrompt]=useState(''),[result,setResult]=useState(''),[copied,setCopied]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState('');

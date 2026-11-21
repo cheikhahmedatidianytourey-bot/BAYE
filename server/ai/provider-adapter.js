@@ -1,5 +1,5 @@
 function normalizeEndpoint(value) {
-  const raw = String(value || '').trim().replace(/\\/$/, '');
+  const raw = String(value || '').trim().replace(/\/$/, '');
   if (!raw) return '';
   return raw.endsWith('/chat/completions') ? raw : raw + '/chat/completions';
 }

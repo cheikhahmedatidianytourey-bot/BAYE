@@ -18,7 +18,9 @@ app.use((req,res,next)=>{
 app.use(express.json({limit:'20kb'}));
 const allowedOrigin = process.env.BAYE_ORIGIN || 'https://baye-app.onrender.com';
 app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Content-Type','Authorization']}));
-app.use('/api/', rateLimit({windowMs:60_000, max:20, standardHeaders:true, legacyHeaders:false}));
+app.use('/api/', rateLimit({windowMs:60_000, max:30, standardHeaders:true, legacyHeaders:false}));
+const generationLimiter=rateLimit({windowMs:60_000,max:8,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes de génération. Réessaie dans une minute.'}});
+const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes média. Réessaie dans une minute.'}});
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo()}));
 
 
@@ -82,10 +84,11 @@ async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0
   if(typeof piece!=='string'||!piece.trim())throw new Error('empty');
   return {piece,finishReason:choice.finish_reason||'stop'};
 }
-app.post('/api/generate', async (req,res)=>{
+app.post('/api/generate', generationLimiter, async (req,res)=>{
   try {
     const {prompt,kind='Texte'}=req.body||{};
     if(typeof prompt!=='string'||!prompt.trim()) return res.status(400).json({error:'Écris une demande avant de générer.'});
+    if(typeof kind!=='string'||kind.length>80)return res.status(400).json({error:'Type de création invalide.'});
     if(prompt.length>8000) return res.status(400).json({error:'Demande trop longue (maximum 8 000 caractères).'});
     const key=process.env.AI_API_KEY;
     if(!key) return res.status(503).json({error:'Le moteur IA n’est pas encore configuré. Réessaie plus tard.'});
@@ -104,10 +107,11 @@ app.post('/api/generate', async (req,res)=>{
 });
 
 // BAYE Agent: two-call cost-conscious workflow (plan + final with built-in quality review).
-app.post('/api/agent', async (req,res)=>{
+app.post('/api/agent', generationLimiter, async (req,res)=>{
   try{
     const {prompt,kind='Texte'}=req.body||{};
     if(typeof prompt!=='string'||!prompt.trim())return res.status(400).json({error:'Écris un objectif avant de lancer BAYE Agent.'});
+    if(typeof kind!=='string'||kind.length>80)return res.status(400).json({error:'Type de création invalide.'});
     if(prompt.length>4000)return res.status(400).json({error:'Objectif trop long (maximum 4 000 caractères).'});
     const key=process.env.AI_API_KEY;
     if(!key)return res.status(503).json({error:'Le moteur IA n’est pas configuré.'});
@@ -126,7 +130,7 @@ app.post('/api/agent', async (req,res)=>{
   }catch(err){console.error('BAYE agent error',err);res.status(502).json({error:'BAYE Agent n’a pas pu terminer. Réessaie plus tard.'});}
 });
 const falModels = {image:'fal-ai/flux/schnell',video:'fal-ai/kling-video/v2.1/standard/text-to-video'};
-app.post('/api/media/generate', async (req,res)=>{
+app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
   try {
     const falKey=process.env.FAL_KEY;
     if(!falKey) return res.status(503).json({error:'Le service de génération média n’est pas configuré.'});

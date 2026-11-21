@@ -161,4 +161,6 @@ app.get('/api/media/status', async (req,res)=>{
     const result=await resultRes.json();res.json({status:'COMPLETED',result});
   }catch(err){console.error('BAYE media status error',err);res.status(500).json({error:'Erreur interne de vérification.'});}
 });
-// Normalize unexpected errors without exposing stack traces or secrets to clients.\napp.use((err,req,res,next)=>{console.error('Unhandled API error',err?.message||err);if(res.headersSent)return next(err);res.status(500).json({error:'Erreur interne. Réessaie plus tard.'});});\nconst port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>console.log('BAYE AI gateway listening on '+port));
+// Normalize unexpected errors without exposing stack traces or secrets to clients.
+app.use((err,req,res,next)=>{console.error('Unhandled API error',err?.message||err);if(res.headersSent)return next(err);res.status(500).json({error:'Erreur interne. Réessaie plus tard.'});});
+const port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>console.log('BAYE AI gateway listening on '+port));

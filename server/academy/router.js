@@ -30,7 +30,8 @@ export function createAcademyRouter({ callAI }) {
         max_tokens: 6500,
         temperature: input.mode === 'research' ? 0.2 : 0.25
       });
-      const deterministicCheck = verifyGoldbachExample(input.prompt);\n      const reviewed = await callAI({
+      const deterministicCheck = verifyGoldbachExample(input.prompt);
+      const reviewed = await callAI({
         key, endpoint, model,
         messages: [
           { role: 'system', content: 'Tu effectues une seconde lecture critique. Ce n’est pas une vérification indépendante ni une preuve formelle. Corrige les erreurs sans inventer de preuves.' },

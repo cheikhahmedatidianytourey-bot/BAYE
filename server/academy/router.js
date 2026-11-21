@@ -47,9 +47,11 @@ export function createAcademyRouter({ callAI }) {
         mode: input.mode,
         language: input.language,
         model,
-        review: 'second_pass_model_review',
+        review: { method: 'same_model_second_pass', independent: false, label: 'Auto-évaluation IA non indépendante' },
+        deterministicChecks: deterministicCheck ? [deterministicCheck] : [],
         limitations: [
-          'La vérification est une seconde passe du modèle, pas une preuve mathématique formelle.',
+          'La seconde lecture utilise le même modèle IA : elle peut laisser passer des erreurs.',
+          'Le contrôle Goldbach, lorsqu’il est déclenché, vérifie uniquement un entier pair précis et ne démontre pas la conjecture générale.',
           'Les référentiels officiels sénégalais et internationaux doivent être importés et validés séparément.',
           'Les réponses de recherche avancée nécessitant des sources récentes doivent être documentées par des références vérifiables.'
         ]

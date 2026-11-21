@@ -71,8 +71,9 @@ export function createAcademyRouter({ callAI }) {
 
   router.get('/research/status', (_req, res) => res.json({
     name: 'BAYE Mathematical Discovery Lab',
-    version: '1.0.0',
+    version: '1.1.0',
     available: true,
+    deterministicChecks: ['bounded_goldbach_instance_up_to_100000'],
     workflow: ['problem_analysis', 'candidate_generation', 'adversarial_critique', 'research_synthesis'],
     foundationModel: 'configured external provider',
     independentModelConsensus: false,

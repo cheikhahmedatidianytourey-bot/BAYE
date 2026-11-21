@@ -125,7 +125,7 @@ app.post('/api/agent', generationLimiter, async (req,res)=>{
     const plan=planResponse.piece;
     const finalResponse=await callAI({key,endpoint,model,messages:[
       {role:'system',content:buildBayeCorePrompt(kind)+' Tu es BAYE Agent. Réalise le plan fourni. Avant de répondre, vérifie silencieusement les erreurs, omissions, contradictions, sécurité et affirmations non vérifiées; corrige-les. Ne prétends pas avoir réalisé d actions externes ni consulté des sources. Retourne directement la réponse finale.'},
-      {role:'user',content:'Objectif : '+prompt+'\\nPlan :\\n'+plan}
+      {role:'user',content:'Objectif : '+prompt+'\nPlan :\n'+plan}
     ],max_tokens:4500,temperature:0.4});
     res.json({result:finalResponse.piece,plan,model,core:{...getCoreInfo(),agentMode:'plan-and-integrated-review',steps:2},verifiedByReview:true});
   }catch(err){console.error('BAYE agent error',err);res.status(502).json({error:'BAYE Agent n’a pas pu terminer. Réessaie plus tard.'});}

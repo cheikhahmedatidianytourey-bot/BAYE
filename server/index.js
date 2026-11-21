@@ -77,7 +77,7 @@ app.get('/api/payment-verification/status', (_req,res)=>res.json({
 }));
 
 async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0.4}){
-  const upstream=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,max_tokens,temperature})});
+  const upstream=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,max_tokens,temperature}),signal:AbortSignal.timeout(90000)});
   if(!upstream.ok){const detail=await upstream.text();console.error('AI provider error',upstream.status,detail.slice(0,500));throw new Error('provider');}
   const data=await upstream.json();
   const choice=data?.choices?.[0],piece=choice?.message?.content;
@@ -144,7 +144,7 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
       catch{return res.status(400).json({error:'URL image invalide.'});}
     }
     const model=falModels[type],payload={prompt};if(type==='video'&&image_url)payload.image_url=image_url;
-    const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});
     if(!upstream.ok){const detail=await upstream.text();console.error('fal submission error',upstream.status,detail.slice(0,300));return res.status(502).json({error:'fal.ai ne peut pas accepter la demande pour le moment.'});}
     const data=await upstream.json();res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type='+type+'&request_id='+encodeURIComponent(data.request_id)});
   }catch(err){console.error('BAYE media error',err);res.status(500).json({error:'Erreur interne du générateur média.'});}
@@ -153,12 +153,12 @@ app.get('/api/media/status', async (req,res)=>{
   try{
     const falKey=process.env.FAL_KEY;if(!falKey)return res.status(503).json({error:'Service média non configuré.'});
     const {type,request_id}=req.query;if(!['image','video'].includes(type)||typeof request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(request_id))return res.status(400).json({error:'Paramètres invalides.'});
-    const model=falModels[type];const statusRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id+'/status',{headers:{Authorization:'Key '+falKey}});
+    const model=falModels[type];const statusRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id+'/status',{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});
     if(!statusRes.ok)return res.status(502).json({error:'Impossible de vérifier la génération.'});
     const status=await statusRes.json();if(status.status!=='COMPLETED')return res.json({status:status.status});
-    const resultRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id,{headers:{Authorization:'Key '+falKey}});
+    const resultRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id,{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});
     if(!resultRes.ok)return res.status(502).json({error:'Résultat indisponible.'});
     const result=await resultRes.json();res.json({status:'COMPLETED',result});
   }catch(err){console.error('BAYE media status error',err);res.status(500).json({error:'Erreur interne de vérification.'});}
 });
-const port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>console.log('BAYE AI gateway listening on '+port));
+// Normalize unexpected errors without exposing stack traces or secrets to clients.\napp.use((err,req,res,next)=>{console.error('Unhandled API error',err?.message||err);if(res.headersSent)return next(err);res.status(500).json({error:'Erreur interne. Réessaie plus tard.'});});\nconst port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>console.log('BAYE AI gateway listening on '+port));

@@ -144,7 +144,7 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
   try {
     const {prompt,type='image',image_url}=req.body||{};
     if(typeof prompt!=='string'||!prompt.trim()) return res.status(400).json({error:'Prompt requis.'});
-    if(prompt.length>4000) return res.status(400).json({error:'Prompt trop long (maximum 4 000 caractères).'});
+    if(prompt.length>2048) return res.status(400).json({error:'Prompt trop long (maximum 2 048 caractères pour le modèle image).'});
     if(!['image','video'].includes(type)) return res.status(400).json({error:'Type invalide.'});
     if(type==='image'){
       const generated=await generateCloudflareImage({prompt:prompt.trim()});
@@ -163,6 +163,7 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
     const data=await upstream.json();res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type=video&request_id='+encodeURIComponent(data.request_id)});
   }catch(err){
     if(err?.code==='MEDIA_NOT_CONFIGURED')return res.status(503).json({code:err.code,error:err.message});
+    if(err?.code==='MEDIA_INVALID_PROMPT')return res.status(400).json({code:err.code,error:err.message});
     if(err?.code==='MEDIA_QUOTA_EXHAUSTED')return res.status(429).json({code:err.code,error:err.message});
     if(err?.code==='MEDIA_PROVIDER_REJECTED'||err?.code==='MEDIA_EMPTY_RESULT')return res.status(502).json({code:err.code,error:err.message});
     console.error('BAYE media error',err);res.status(500).json({error:'Erreur interne du générateur média.'});

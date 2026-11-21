@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
+import { runMonitor } from './baye-monitor.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -12,6 +13,15 @@ app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Co
 app.use('/api/', rateLimit({windowMs:60_000, max:20, standardHeaders:true, legacyHeaders:false}));
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo()}));
 
+
+// BAYE autonomous monitoring: restricted endpoint; secret must be configured in Render.
+app.get('/api/monitor/check', async (req,res)=>{
+  const secret=process.env.BAYE_MONITOR_SECRET;
+  if(!secret) return res.status(503).json({error:'Monitoring access secret not configured'});
+  if(req.get('authorization') !== 'Bearer '+secret) return res.status(401).json({error:'Unauthorized'});
+  try { res.json(await runMonitor()); }
+  catch(_err){ res.status(500).json({error:'Monitoring check failed'}); }
+});
 
 // BAYE Payments: safe public catalog only; checkout and verification stay disabled until a provider is configured.
 app.get('/api/payment-methods', (_req,res)=>res.json({

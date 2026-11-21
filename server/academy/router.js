@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { getAcademyCatalog } from './catalog.js';
 import { validateAcademyRequest, buildAcademyInstruction, buildAcademyReviewInstruction } from './engine.js';
 import { validateResearchRequest, buildResearchPlan, buildResearchCritique, buildResearchSynthesis } from './research.js';
+import { verifyGoldbachExample } from './math-checks.js';
 
 export function createAcademyRouter({ callAI }) {
   const router = express.Router();
@@ -29,11 +30,11 @@ export function createAcademyRouter({ callAI }) {
         max_tokens: 6500,
         temperature: input.mode === 'research' ? 0.2 : 0.25
       });
-      const reviewed = await callAI({
+      const deterministicCheck = verifyGoldbachExample(input.prompt);\n      const reviewed = await callAI({
         key, endpoint, model,
         messages: [
-          { role: 'system', content: 'Tu effectues une vérification pédagogique et disciplinaire indépendante. Corrige les erreurs sans inventer de preuves.' },
-          { role: 'user', content: buildAcademyReviewInstruction(input, first.piece) }
+          { role: 'system', content: 'Tu effectues une seconde lecture critique. Ce n’est pas une vérification indépendante ni une preuve formelle. Corrige les erreurs sans inventer de preuves.' },
+          { role: 'user', content: buildAcademyReviewInstruction(input, first.piece, deterministicCheck) }
         ],
         max_tokens: 6500,
         temperature: 0.1

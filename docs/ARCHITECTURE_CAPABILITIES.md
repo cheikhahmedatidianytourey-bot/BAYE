@@ -47,3 +47,12 @@ Ces fonctions ne doivent pas être annoncées comme disponibles avant leur impl�
 ## Validation
 
 La CI exécute `npm test` et `npm run build`. Les tests de cette branche vérifient le routage, la transparence du catalogue, l'activation explicite du secours et le comportement de bascule simulé. Ils ne prouvent pas la disponibilité réelle des fournisseurs externes.
+
+## Génération d’images et de vidéos
+
+- **Images :** adaptateur `server/ai/media-adapter.js` utilisant `@cf/black-forest-labs/flux-1-schnell` via Cloudflare Workers AI. La génération est synchrone et le résultat image est renvoyé sous forme de data URI. Configuration serveur requise : `CLOUDFLARE_ACCOUNT_ID` et `CLOUDFLARE_API_TOKEN`.
+- **Quota image :** Cloudflare documente une allocation Workers AI gratuite de 10 000 Neurons par jour sur le plan Workers Free; les limites et modèles disponibles peuvent évoluer. Le dépassement du quota gratuit échoue au lieu de basculer vers une facturation cachée.
+- **Vidéos :** génération asynchrone via fal.ai/Kling. Elle reste indisponible sans `FAL_KEY` et sans solde valide chez le fournisseur. Aucun fournisseur vidéo gratuit récurrent et suffisamment vérifié n’est activé par défaut.
+- `GET /api/capabilities` expose séparément la configuration des fournisseurs image et vidéo, sans révéler les secrets.
+- L’interface affiche directement l’image générée; la vidéo conserve le suivi de tâche. Les erreurs de quota et d’absence de configuration sont explicites.
+- Aucun fournisseur de secours payant n’est activé automatiquement. La disponibilité réelle doit être confirmée par un test de production après configuration des secrets.

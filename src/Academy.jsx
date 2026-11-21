@@ -23,12 +23,13 @@ export default function Academy() {
   const [language,setLanguage] = useState('fr');
   const [prompt,setPrompt] = useState('');
   const [result,setResult] = useState('');
+  const [verification,setVerification] = useState(null);
   const [error,setError] = useState('');
   const [busy,setBusy] = useState(false);
 
   async function submit() {
     if (!prompt.trim() || busy) return;
-    setBusy(true); setError(''); setResult('');
+    setBusy(true); setError(''); setResult(''); setVerification(null);
     try {
       const research = mode === 'research';
       const response = await fetch(API + (research ? '/api/academy/research' : '/api/academy/solve'), {
@@ -42,6 +43,7 @@ export default function Academy() {
       const answer = research ? data.report : data.result;
       if (!answer) throw new Error('Réponse pédagogique vide.');
       setResult(answer);
+      setVerification(research ? null : { review: data.review, checks: data.deterministicChecks || [], limitations: data.limitations || [] });
     } catch (err) {
       setError(err.message || 'Connexion impossible.');
     } finally {
@@ -88,10 +90,10 @@ export default function Academy() {
         {error&&<div className="error" role="alert"><b>La demande n’a pas abouti</b><p>{error}</p></div>}
       </div>
       <aside className="aside">
-        <div className="hint"><span>✧</span><p className="eyebrow">{research ? 'DÉMARCHE SCIENTIFIQUE' : 'APPRENDRE EN PROFONDEUR'}</p><h3>{research ? 'Une piste n’est pas une preuve.' : 'Comprendre vaut mieux que mémoriser.'}</h3><p>{research ? 'Le laboratoire analyse, propose des pistes, cherche des failles et synthétise les résultats avec prudence.' : 'BAYE détaille les méthodes, justifie les étapes et vérifie les résultats avant de conclure.'}</p></div>
+        <div className="hint"><span>✧</span><p className="eyebrow">{research ? 'DÉMARCHE SCIENTIFIQUE' : 'APPRENDRE EN PROFONDEUR'}</p><h3>{research ? 'Une piste n’est pas une preuve.' : 'Comprendre vaut mieux que mémoriser.'}</h3><p>{research ? 'Le laboratoire analyse, propose des pistes, cherche des failles et synthétise les résultats avec prudence.' : 'BAYE détaille les méthodes et justifie les étapes. Les contrôles automatiques sont affichés séparément lorsqu’ils existent.'}</p></div>
         {research ? <div className="hint quiet"><p className="eyebrow">LIMITES DE CETTE VERSION</p><p>Les quatre étapes utilisent le même modèle IA. Aucun calcul symbolique, assistant de preuve formelle (Lean) ou moteur de recherche scientifique n’est encore connecté. Les résultats restent exploratoires et non vérifiés formellement.</p></div> : <div className="hint quiet"><p className="eyebrow">PROGRAMMES</p><p>Le catalogue de matières et de niveaux est intégré. L’import et la validation des référentiels officiels sénégalais et internationaux restent à réaliser.</p></div>}
       </aside>
     </div>
-    {result&&<div className="panel answer"><div className="answerHead"><div><p className="eyebrow">{research ? 'RAPPORT DU DISCOVERY LAB' : 'RÉSULTAT PÉDAGOGIQUE'}</p><h2>{research ? 'Exploration et audit contradictoire' : 'Explication et correction'}</h2></div></div><div className="answerText">{result}</div>{research&&<p className="inputFoot">Statut : exploration non équivalente à une preuve. Toute affirmation mathématique doit être vérifiée indépendamment.</p>}</div>}
+    {result&&<div className="panel answer"><div className="answerHead"><div><p className="eyebrow">{research ? 'RAPPORT DU DISCOVERY LAB' : 'RÉSULTAT PÉDAGOGIQUE'}</p><h2>{research ? 'Exploration et audit contradictoire' : 'Explication et correction'}</h2></div></div><div className="answerText">{result}</div>{verification&&<div className="hint quiet"><p className="eyebrow">TRANSPARENCE DES VÉRIFICATIONS</p><p>{verification.review?.label || 'Seconde lecture IA'} — non indépendante.</p>{verification.checks.map((check,index)=><div key={index}><b>Contrôle déterministe : {check.checker}</b>{check.status==='finite_instance_checked'?<><p>Pour n = {check.n} : {check.representationCount} décompositions en deux nombres premiers.</p><p>{check.pairs.map(pair=>pair.join(' + ')).join(' ; ')}</p><p>{check.scope}</p></>:<p>{check.reason}</p>}</div>)}{verification.limitations.map((item,index)=><p key={index}>{item}</p>)}</div>}{research&&<p className="inputFoot">Statut : exploration non équivalente à une preuve. Toute affirmation mathématique doit être vérifiée indépendamment.</p>}</div>}
   </section>;
 }

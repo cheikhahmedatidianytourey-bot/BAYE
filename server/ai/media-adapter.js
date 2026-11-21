@@ -8,6 +8,7 @@ export function getMediaProviderStatus(env=process.env){
 }
 
 export async function generateCloudflareImage({prompt,env=process.env,fetchImpl=fetch}){
+  if(typeof prompt!=='string'||!prompt.trim()||prompt.length>2048){const error=new Error('La description doit contenir entre 1 et 2 048 caractères.');error.code='MEDIA_INVALID_PROMPT';throw error;}
   if(!env.CLOUDFLARE_ACCOUNT_ID||!env.CLOUDFLARE_API_TOKEN){
     const error=new Error('La génération d’images nécessite CLOUDFLARE_ACCOUNT_ID et CLOUDFLARE_API_TOKEN.');
     error.code='MEDIA_NOT_CONFIGURED'; throw error;
@@ -16,8 +17,10 @@ export async function generateCloudflareImage({prompt,env=process.env,fetchImpl=
   const response=await fetchImpl(url,{method:'POST',headers:{Authorization:'Bearer '+env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({prompt,steps:4}),signal:AbortSignal.timeout(90000)});
   const data=await response.json().catch(()=>null);
   if(!response.ok||data?.success===false){
-    const error=new Error(response.status===429?'Quota gratuit Cloudflare atteint ou limite temporaire.':'Le fournisseur image a refusé la génération.');
-    error.code=response.status===429?'MEDIA_QUOTA_EXHAUSTED':'MEDIA_PROVIDER_REJECTED'; throw error;
+    const providerText=JSON.stringify(data?.errors||data?.messages||[]).toLowerCase();
+    const quota=response.status===429||((response.status===403||response.status===400)&&/(quota|neurons|daily limit|exceeded.*limit|billing limit)/.test(providerText));
+    const error=new Error(quota?'Quota Workers AI atteint ou limite du compte. La génération est arrêtée sans bascule payante.':'Le fournisseur image a refusé la génération. Vérifiez les permissions du jeton et le statut du modèle.');
+    error.code=quota?'MEDIA_QUOTA_EXHAUSTED':'MEDIA_PROVIDER_REJECTED'; error.status=response.status; throw error;
   }
   const image=data?.result?.image;
   if(typeof image!=='string'||!image.length){const error=new Error('Le fournisseur n’a retourné aucune image exploitable.');error.code='MEDIA_EMPTY_RESULT';throw error;}

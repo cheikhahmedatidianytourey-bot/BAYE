@@ -146,7 +146,7 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
     }
     const model=falModels[type],payload={prompt};if(type==='video'&&image_url)payload.image_url=image_url;
     const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});
-    if(!upstream.ok){const detail=await upstream.text();console.error('fal submission error',upstream.status,detail.slice(0,300));return res.status(502).json({error:'fal.ai ne peut pas accepter la demande pour le moment.'});}
+    if(!upstream.ok){const detail=await upstream.text();console.error('fal submission error',upstream.status,detail.slice(0,300));const exhausted=upstream.status===403&&/exhausted balance|user is locked/i.test(detail);return res.status(502).json({code:exhausted?'PROVIDER_BALANCE_EXHAUSTED':'MEDIA_PROVIDER_REJECTED',error:exhausted?'Le fournisseur média externe a épuisé son solde. BAYE n’a pas pu lancer cette génération.':'Le fournisseur média externe a refusé cette demande. BAYE n’a pas pu lancer cette génération.'});}
     const data=await upstream.json();res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type='+type+'&request_id='+encodeURIComponent(data.request_id)});
   }catch(err){console.error('BAYE media error',err);res.status(500).json({error:'Erreur interne du générateur média.'});}
 });

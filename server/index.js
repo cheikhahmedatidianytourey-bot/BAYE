@@ -21,6 +21,7 @@ app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Co
 app.use('/api/', rateLimit({windowMs:60_000, max:30, standardHeaders:true, legacyHeaders:false}));
 const generationLimiter=rateLimit({windowMs:60_000,max:8,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes de génération. Réessaie dans une minute.'}});
 const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes média. Réessaie dans une minute.'}});
+const mediaStatusLimiter=rateLimit({windowMs:60_000,max:30,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de vérifications média. Réessaie dans une minute.'}});
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo()}));
 
 
@@ -149,7 +150,7 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
     const data=await upstream.json();res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type='+type+'&request_id='+encodeURIComponent(data.request_id)});
   }catch(err){console.error('BAYE media error',err);res.status(500).json({error:'Erreur interne du générateur média.'});}
 });
-app.get('/api/media/status', async (req,res)=>{
+app.get('/api/media/status', mediaStatusLimiter, async (req,res)=>{
   try{
     const falKey=process.env.FAL_KEY;if(!falKey)return res.status(503).json({error:'Service média non configuré.'});
     const {type,request_id}=req.query;if(!['image','video'].includes(type)||typeof request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(request_id))return res.status(400).json({error:'Paramètres invalides.'});

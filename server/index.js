@@ -12,6 +12,23 @@ app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Co
 app.use('/api/', rateLimit({windowMs:60_000, max:20, standardHeaders:true, legacyHeaders:false}));
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo()}));
 
+
+// BAYE Payments: safe public catalog only; checkout and verification stay disabled until a provider is configured.
+app.get('/api/payment-methods', (_req,res)=>res.json({
+  paymentSystem:'BAYE Payment Security Core',
+  status:'not_configured',
+  methods:[
+    {id:'wave',name:'Wave',status:'planned'},
+    {id:'orange_money',name:'Orange Money',status:'planned'},
+    {id:'card',name:'Visa / Mastercard',status:'planned'},
+    {id:'paypal',name:'PayPal',status:'planned'},
+    {id:'apple_pay',name:'Apple Pay',status:'planned'},
+    {id:'google_pay',name:'Google Pay',status:'planned'},
+    {id:'djamo',name:'Djamo',status:'needs_provider_validation'}
+  ],
+  securityPolicy:'No subscription is activated by a user statement, screenshot, or unverified callback. Server-side provider verification is required.'
+}));
+
 async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0.4}){
   const upstream=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,max_tokens,temperature})});
   if(!upstream.ok){const detail=await upstream.text();console.error('AI provider error',upstream.status,detail.slice(0,500));throw new Error('provider');}

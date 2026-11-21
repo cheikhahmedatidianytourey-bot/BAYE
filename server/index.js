@@ -16,9 +16,9 @@ async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0
   const upstream=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,max_tokens,temperature})});
   if(!upstream.ok){const detail=await upstream.text();console.error('AI provider error',upstream.status,detail.slice(0,500));throw new Error('provider');}
   const data=await upstream.json();
-  const piece=data?.choices?.[0]?.message?.content;
+  const choice=data?.choices?.[0],piece=choice?.message?.content;
   if(typeof piece!=='string'||!piece.trim())throw new Error('empty');
-  return piece;
+  return {piece,finishReason:choice.finish_reason||'stop'};
 }
 app.post('/api/generate', async (req,res)=>{
   try {
@@ -29,8 +29,15 @@ app.post('/api/generate', async (req,res)=>{
     if(!key) return res.status(503).json({error:'Le moteur IA n’est pas encore configuré. Réessaie plus tard.'});
     const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
-    const output=await callAI({key,endpoint,model,messages:[{role:'system',content:buildBayeCorePrompt(kind)},{role:'user',content:prompt}],max_tokens:8192,temperature:0.7});
-    res.json({result:output,model,core:getCoreInfo(),partial:false});
+    let output='',finishReason='stop';
+    const messages=[{role:'system',content:buildBayeCorePrompt(kind)},{role:'user',content:prompt}];
+    for(let part=0;part<3;part++){
+      const response=await callAI({key,endpoint,model,messages,max_tokens:8192,temperature:0.7});
+      output+=response.piece;finishReason=response.finishReason;
+      if(finishReason!=='length'||part===2)break;
+      messages.push({role:'assistant',content:response.piece},{role:'user',content:'Continue exactly where you stopped, without repeating. Complete the answer.'});
+    }
+    res.json({result:output,model,core:getCoreInfo(),partial:finishReason==='length'});
   } catch(err){console.error('BAYE gateway error',err);res.status(502).json({error:'Le moteur IA rencontre un problème. Réessaie plus tard.'});}
 });
 
@@ -44,18 +51,21 @@ app.post('/api/agent', async (req,res)=>{
     if(!key)return res.status(503).json({error:'Le moteur IA n’est pas configuré.'});
     const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
-    const plan=await callAI({key,endpoint,model,messages:[
+    const planResponse=await callAI({key,endpoint,model,messages:[
       {role:'system',content:'Tu es BAYE Agent, planificateur. Transforme l’objectif en plan bref de 3 à 5 étapes réalisables en génération de texte uniquement. Ne planifie aucune action externe, aucun achat, aucune publication, aucune modification de compte ni commande système. Retourne une liste numérotée simple.'},
       {role:'user',content:prompt}
     ],max_tokens:1200,temperature:0.2});
-    const draft=await callAI({key,endpoint,model,messages:[
+    const plan=planResponse.piece;
+    const draftResponse=await callAI({key,endpoint,model,messages:[
       {role:'system',content:buildBayeCorePrompt(kind)+' Tu es BAYE Agent. Réalise le plan fourni en produisant une réponse textuelle. Ne prétends pas avoir réalisé d actions externes.'},
       {role:'user',content:'Objectif : '+prompt+'\nPlan :\n'+plan}
     ],max_tokens:5000,temperature:0.5});
-    const reviewed=await callAI({key,endpoint,model,messages:[
+    const draft=draftResponse.piece;
+    const reviewedResponse=await callAI({key,endpoint,model,messages:[
       {role:'system',content:'Tu es le contrôleur qualité final de BAYE. Corrige les erreurs, contradictions, omissions et affirmations non vérifiées dans le brouillon. Ne prétends pas avoir vérifié des sources ou exécuté des actions. Retourne la version finale uniquement.'},
       {role:'user',content:'Objectif : '+prompt+'\nPlan :\n'+plan+'\nBrouillon :\n'+draft}
     ],max_tokens:5000,temperature:0.2});
+    const reviewed=reviewedResponse.piece;
     res.json({result:reviewed,plan,model,core:{...getCoreInfo(),agentMode:'plan-draft-review',steps:3},verifiedByReview:true});
   }catch(err){console.error('BAYE agent error',err);res.status(502).json({error:'BAYE Agent n’a pas pu terminer. Réessaie plus tard.'});}
 });

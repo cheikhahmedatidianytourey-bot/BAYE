@@ -9,7 +9,7 @@ app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(express.json({limit:'20kb'}));
 const allowedOrigin = process.env.BAYE_ORIGIN || 'https://baye-app.onrender.com';
-app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Content-Type']}));
+app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Content-Type','Authorization']}));
 app.use('/api/', rateLimit({windowMs:60_000, max:20, standardHeaders:true, legacyHeaders:false}));
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo()}));
 

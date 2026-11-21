@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
 import { runMonitor } from './baye-monitor.js';
 import { createAcademyRouter } from './academy/router.js';
+import { buildDomainSystemPrompt, getBayeCapabilityCatalog } from './ai/domain-router.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -24,6 +25,7 @@ const generationLimiter=rateLimit({windowMs:60_000,max:8,standardHeaders:true,le
 const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes média. Réessaie dans une minute.'}});
 const mediaStatusLimiter=rateLimit({windowMs:60_000,max:30,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de vérifications média. Réessaie dans une minute.'}});
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo()}));
+app.get('/api/capabilities', (_req,res)=>res.json(getBayeCapabilityCatalog()));
 
 
 // BAYE autonomous monitoring: restricted endpoint; secret must be configured in Render.
@@ -100,14 +102,15 @@ app.post('/api/generate', generationLimiter, async (req,res)=>{
     const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
     let output='',finishReason='stop';
-    const messages=[{role:'system',content:buildBayeCorePrompt(kind)},{role:'user',content:prompt}];
+    const routed = buildDomainSystemPrompt(kind, prompt);
+    const messages=[{role:'system',content:routed.systemPrompt},{role:'user',content:prompt}];
     for(let part=0;part<3;part++){
       const response=await callAI({key,endpoint,model,messages,max_tokens:8192,temperature:0.7});
       output+=response.piece;finishReason=response.finishReason;
       if(finishReason!=='length'||part===2)break;
       messages.push({role:'assistant',content:response.piece},{role:'user',content:'Continue exactly where you stopped, without repeating. Complete the answer.'});
     }
-    res.json({result:output,model,core:getCoreInfo(),partial:finishReason==='length'});
+    res.json({result:output,model,core:getCoreInfo(),domain:routed.route,partial:finishReason==='length'});
   } catch(err){console.error('BAYE gateway error',err);res.status(502).json({error:'Le moteur IA rencontre un problème. Réessaie plus tard.'});}
 });
 

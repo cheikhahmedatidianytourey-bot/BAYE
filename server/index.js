@@ -165,7 +165,16 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
     if(err?.code==='MEDIA_NOT_CONFIGURED')return res.status(503).json({code:err.code,error:err.message});
     if(err?.code==='MEDIA_INVALID_PROMPT')return res.status(400).json({code:err.code,error:err.message});
     if(err?.code==='MEDIA_QUOTA_EXHAUSTED')return res.status(429).json({code:err.code,error:err.message});
-    if(err?.code==='MEDIA_PROVIDER_REJECTED'||err?.code==='MEDIA_EMPTY_RESULT')return res.status(502).json({code:err.code,error:err.message});
+    if(err?.code==='MEDIA_PROVIDER_REJECTED'||err?.code==='MEDIA_EMPTY_RESULT'){
+      // Provider details contain only Cloudflare error codes/messages, never request headers or secrets.
+      console.warn('BAYE Cloudflare image rejection',JSON.stringify({status:err.status||null,code:err.code,providerErrors:err.providerErrors||[]}));
+      return res.status(502).json({
+        code:err.code,
+        error:err.message,
+        provider_status:err.status||null,
+        provider_errors:err.providerErrors||[]
+      });
+    }
     console.error('BAYE media error',err);res.status(500).json({error:'Erreur interne du générateur média.'});
   }
 });

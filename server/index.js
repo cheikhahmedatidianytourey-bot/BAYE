@@ -3,6 +3,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
 import { runMonitor } from './baye-monitor.js';
+import { createAcademyRouter } from './academy/router.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -76,6 +77,9 @@ app.get('/api/payment-verification/status', (_req,res)=>res.json({
   checks:['transaction id format','positive integer amount','ISO currency code format','known transaction status'],
   note:'Record validation is not proof of payment. Live activation requires provider authentication, amount/currency/order matching, replay protection, and persistent transaction storage.'
 }));
+
+
+app.use('/api/academy', createAcademyRouter({ callAI }));
 
 async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0.4}){
   const upstream=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,max_tokens,temperature}),signal:AbortSignal.timeout(90000)});

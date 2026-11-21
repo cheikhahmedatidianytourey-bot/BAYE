@@ -4,13 +4,22 @@ import rateLimit from 'express-rate-limit';
 import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
 
 const app = express();
-app.set('trust proxy', 1); // Render proxy
+app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(express.json({limit:'20kb'}));
 const allowedOrigin = process.env.BAYE_ORIGIN || 'https://baye-app.onrender.com';
 app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Content-Type']}));
 app.use('/api/', rateLimit({windowMs:60_000, max:20, standardHeaders:true, legacyHeaders:false}));
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo()}));
+
+async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0.4}){
+  const upstream=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,max_tokens,temperature})});
+  if(!upstream.ok){const detail=await upstream.text();console.error('AI provider error',upstream.status,detail.slice(0,500));throw new Error('provider');}
+  const data=await upstream.json();
+  const piece=data?.choices?.[0]?.message?.content;
+  if(typeof piece!=='string'||!piece.trim())throw new Error('empty');
+  return piece;
+}
 app.post('/api/generate', async (req,res)=>{
   try {
     const {prompt,kind='Texte'}=req.body||{};
@@ -20,31 +29,37 @@ app.post('/api/generate', async (req,res)=>{
     if(!key) return res.status(503).json({error:'Le moteur IA n’est pas encore configuré. Réessaie plus tard.'});
     const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
-    const system=buildBayeCorePrompt(kind);
-    const messages=[{role:'system',content:system},{role:'user',content:prompt}];
-    let output='';
-    let finishReason='';
-    // Continue automatically when the provider reports a token-limit truncation, up to 2 continuation calls.
-    for(let part=0;part<3;part++){
-      const upstream=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,temperature:0.7,max_tokens:8192})});
-      if(!upstream.ok){const detail=await upstream.text(); console.error('AI provider error',upstream.status,detail.slice(0,500)); return res.status(502).json({error:'Le moteur IA rencontre un problème. Réessaie plus tard.'});}
-      const data=await upstream.json();
-      const choice=data?.choices?.[0];
-      const piece=choice?.message?.content;
-      if(typeof piece!=='string'||!piece.trim()) return res.status(502).json({error:'Réponse IA vide. Réessaie.'});
-      output+=piece;
-      finishReason=choice?.finish_reason||'stop';
-      if(finishReason!=='length'||part===2) break;
-      messages.push({role:'assistant',content:piece},{role:'user',content:'Continue exactement à partir de la fin de ta réponse précédente. Ne répète aucun contenu. Termine les fichiers et les explications manquants.'});
-    }
-    res.json({result:output,model,core:getCoreInfo(),partial:finishReason==='length'});
-  } catch(err){console.error('BAYE gateway error',err);res.status(500).json({error:'Erreur interne. Réessaie plus tard.'});}
+    const output=await callAI({key,endpoint,model,messages:[{role:'system',content:buildBayeCorePrompt(kind)},{role:'user',content:prompt}],max_tokens:8192,temperature:0.7});
+    res.json({result:output,model,core:getCoreInfo(),partial:false});
+  } catch(err){console.error('BAYE gateway error',err);res.status(502).json({error:'Le moteur IA rencontre un problème. Réessaie plus tard.'});}
 });
 
-const falModels = {
-  image: 'fal-ai/flux/schnell',
-  video: 'fal-ai/kling-video/v2.1/standard/text-to-video'
-};
+// Agent v3: bounded planning, text execution and quality review; no external actions.
+app.post('/api/agent', async (req,res)=>{
+  try{
+    const {prompt,kind='Texte'}=req.body||{};
+    if(typeof prompt!=='string'||!prompt.trim())return res.status(400).json({error:'Écris un objectif avant de lancer BAYE Agent.'});
+    if(prompt.length>4000)return res.status(400).json({error:'Objectif trop long (maximum 4 000 caractères).'});
+    const key=process.env.AI_API_KEY;
+    if(!key)return res.status(503).json({error:'Le moteur IA n’est pas configuré.'});
+    const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
+    const model=process.env.AI_MODEL||'gpt-4o-mini';
+    const plan=await callAI({key,endpoint,model,messages:[
+      {role:'system',content:'Tu es BAYE Agent, planificateur. Transforme l’objectif en plan bref de 3 à 5 étapes réalisables en génération de texte uniquement. Ne planifie aucune action externe, aucun achat, aucune publication, aucune modification de compte ni commande système. Retourne une liste numérotée simple.'},
+      {role:'user',content:prompt}
+    ],max_tokens:1200,temperature:0.2});
+    const draft=await callAI({key,endpoint,model,messages:[
+      {role:'system',content:buildBayeCorePrompt(kind)+' Tu es BAYE Agent. Réalise le plan fourni en produisant une réponse textuelle. Ne prétends pas avoir réalisé d actions externes.'},
+      {role:'user',content:'Objectif : '+prompt+'\nPlan :\n'+plan}
+    ],max_tokens:5000,temperature:0.5});
+    const reviewed=await callAI({key,endpoint,model,messages:[
+      {role:'system',content:'Tu es le contrôleur qualité final de BAYE. Corrige les erreurs, contradictions, omissions et affirmations non vérifiées dans le brouillon. Ne prétends pas avoir vérifié des sources ou exécuté des actions. Retourne la version finale uniquement.'},
+      {role:'user',content:'Objectif : '+prompt+'\nPlan :\n'+plan+'\nBrouillon :\n'+draft}
+    ],max_tokens:5000,temperature:0.2});
+    res.json({result:reviewed,plan,model,core:{...getCoreInfo(),agentMode:'plan-draft-review',steps:3},verifiedByReview:true});
+  }catch(err){console.error('BAYE agent error',err);res.status(502).json({error:'BAYE Agent n’a pas pu terminer. Réessaie plus tard.'});}
+});
+const falModels = {image:'fal-ai/flux/schnell',video:'fal-ai/kling-video/v2.1/standard/text-to-video'};
 app.post('/api/media/generate', async (req,res)=>{
   try {
     const falKey=process.env.FAL_KEY;
@@ -54,32 +69,22 @@ app.post('/api/media/generate', async (req,res)=>{
     if(prompt.length>4000) return res.status(400).json({error:'Prompt trop long (maximum 4 000 caractères).'});
     if(!['image','video'].includes(type)) return res.status(400).json({error:'Type invalide.'});
     if(type==='video'&&image_url&&typeof image_url!=='string') return res.status(400).json({error:'URL image invalide.'});
-    const model=falModels[type];
-    const payload={prompt};
-    if(type==='video'&&image_url) payload.image_url=image_url;
+    const model=falModels[type],payload={prompt};if(type==='video'&&image_url)payload.image_url=image_url;
     const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!upstream.ok){const detail=await upstream.text();console.error('fal submission error',upstream.status,detail.slice(0,300));return res.status(502).json({error:'fal.ai ne peut pas accepter la demande pour le moment.'});}
-    const data=await upstream.json();
-    res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type='+type+'&request_id='+encodeURIComponent(data.request_id)});
+    const data=await upstream.json();res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type='+type+'&request_id='+encodeURIComponent(data.request_id)});
   }catch(err){console.error('BAYE media error',err);res.status(500).json({error:'Erreur interne du générateur média.'});}
 });
 app.get('/api/media/status', async (req,res)=>{
   try{
-    const falKey=process.env.FAL_KEY;
-    if(!falKey) return res.status(503).json({error:'Service média non configuré.'});
-    const {type,request_id}=req.query;
-    if(!['image','video'].includes(type)||typeof request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(request_id)) return res.status(400).json({error:'Paramètres invalides.'});
-    const model=falModels[type];
-    const statusRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id+'/status',{headers:{Authorization:'Key '+falKey}});
+    const falKey=process.env.FAL_KEY;if(!falKey)return res.status(503).json({error:'Service média non configuré.'});
+    const {type,request_id}=req.query;if(!['image','video'].includes(type)||typeof request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(request_id))return res.status(400).json({error:'Paramètres invalides.'});
+    const model=falModels[type];const statusRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id+'/status',{headers:{Authorization:'Key '+falKey}});
     if(!statusRes.ok)return res.status(502).json({error:'Impossible de vérifier la génération.'});
-    const status=await statusRes.json();
-    if(status.status!=='COMPLETED')return res.json({status:status.status});
+    const status=await statusRes.json();if(status.status!=='COMPLETED')return res.json({status:status.status});
     const resultRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id,{headers:{Authorization:'Key '+falKey}});
     if(!resultRes.ok)return res.status(502).json({error:'Résultat indisponible.'});
-    const result=await resultRes.json();
-    res.json({status:'COMPLETED',result});
+    const result=await resultRes.json();res.json({status:'COMPLETED',result});
   }catch(err){console.error('BAYE media status error',err);res.status(500).json({error:'Erreur interne de vérification.'});}
 });
-
-const port=process.env.PORT||10000;
-app.listen(port,'0.0.0.0',()=>console.log('BAYE AI gateway listening on '+port));
+const port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>console.log('BAYE AI gateway listening on '+port));

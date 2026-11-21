@@ -5,6 +5,7 @@ import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
 import { runMonitor } from './baye-monitor.js';
 import { createAcademyRouter } from './academy/router.js';
 import { buildDomainSystemPrompt, getBayeCapabilityCatalog } from './ai/domain-router.js';
+import { requestAICompletion, getAIProviderStatus } from './ai/provider-adapter.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -25,7 +26,7 @@ const generationLimiter=rateLimit({windowMs:60_000,max:8,standardHeaders:true,le
 const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes média. Réessaie dans une minute.'}});
 const mediaStatusLimiter=rateLimit({windowMs:60_000,max:30,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de vérifications média. Réessaie dans une minute.'}});
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo()}));
-app.get('/api/capabilities', (_req,res)=>res.json(getBayeCapabilityCatalog()));
+app.get('/api/capabilities', (_req,res)=>res.json({ ...getBayeCapabilityCatalog(), providers: getAIProviderStatus() }));
 
 
 // BAYE autonomous monitoring: restricted endpoint; secret must be configured in Render.
@@ -84,12 +85,12 @@ app.get('/api/payment-verification/status', (_req,res)=>res.json({
 app.use('/api/academy', createAcademyRouter({ callAI }));
 
 async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0.4}){
-  const upstream=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,max_tokens,temperature}),signal:AbortSignal.timeout(90000)});
-  if(!upstream.ok){const detail=await upstream.text();console.error('AI provider error',upstream.status,detail.slice(0,500));throw new Error('provider');}
-  const data=await upstream.json();
-  const choice=data?.choices?.[0],piece=choice?.message?.content;
-  if(typeof piece!=='string'||!piece.trim())throw new Error('empty');
-  return {piece,finishReason:choice.finish_reason||'stop'};
+  return requestAICompletion({
+    primary: { key, endpoint, model },
+    messages,
+    max_tokens,
+    temperature
+  });
 }
 app.post('/api/generate', generationLimiter, async (req,res)=>{
   try {

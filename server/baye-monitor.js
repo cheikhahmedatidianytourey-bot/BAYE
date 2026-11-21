@@ -50,4 +50,4 @@ async function runMonitor() {
   };
 }
 
-module.exports = { checkEndpoint, runMonitor };
+export { checkEndpoint, runMonitor };

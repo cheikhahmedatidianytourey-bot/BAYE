@@ -4,6 +4,9 @@ import rateLimit from 'express-rate-limit';
 import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
 import { runMonitor } from './baye-monitor.js';
 import { createAcademyRouter } from './academy/router.js';
+import { buildDomainSystemPrompt, getBayeCapabilityCatalog } from './ai/domain-router.js';
+import { requestAICompletion, getAIProviderStatus } from './ai/provider-adapter.js';
+import { generateCloudflareImage, getMediaProviderStatus } from './ai/media-adapter.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -24,6 +27,7 @@ const generationLimiter=rateLimit({windowMs:60_000,max:8,standardHeaders:true,le
 const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes média. Réessaie dans une minute.'}});
 const mediaStatusLimiter=rateLimit({windowMs:60_000,max:30,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de vérifications média. Réessaie dans une minute.'}});
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo()}));
+app.get('/api/capabilities', (_req,res)=>res.json({ ...getBayeCapabilityCatalog(), providers: getAIProviderStatus(), media: getMediaProviderStatus() }));
 
 
 // BAYE autonomous monitoring: restricted endpoint; secret must be configured in Render.
@@ -82,12 +86,12 @@ app.get('/api/payment-verification/status', (_req,res)=>res.json({
 app.use('/api/academy', createAcademyRouter({ callAI }));
 
 async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0.4}){
-  const upstream=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,max_tokens,temperature}),signal:AbortSignal.timeout(90000)});
-  if(!upstream.ok){const detail=await upstream.text();console.error('AI provider error',upstream.status,detail.slice(0,500));throw new Error('provider');}
-  const data=await upstream.json();
-  const choice=data?.choices?.[0],piece=choice?.message?.content;
-  if(typeof piece!=='string'||!piece.trim())throw new Error('empty');
-  return {piece,finishReason:choice.finish_reason||'stop'};
+  return requestAICompletion({
+    primary: { key, endpoint, model },
+    messages,
+    max_tokens,
+    temperature
+  });
 }
 app.post('/api/generate', generationLimiter, async (req,res)=>{
   try {
@@ -100,14 +104,15 @@ app.post('/api/generate', generationLimiter, async (req,res)=>{
     const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
     let output='',finishReason='stop';
-    const messages=[{role:'system',content:buildBayeCorePrompt(kind)},{role:'user',content:prompt}];
+    const routed = buildDomainSystemPrompt(kind, prompt);
+    const messages=[{role:'system',content:routed.systemPrompt},{role:'user',content:prompt}];
     for(let part=0;part<3;part++){
       const response=await callAI({key,endpoint,model,messages,max_tokens:8192,temperature:0.7});
       output+=response.piece;finishReason=response.finishReason;
       if(finishReason!=='length'||part===2)break;
       messages.push({role:'assistant',content:response.piece},{role:'user',content:'Continue exactly where you stopped, without repeating. Complete the answer.'});
     }
-    res.json({result:output,model,core:getCoreInfo(),partial:finishReason==='length'});
+    res.json({result:output,model,core:getCoreInfo(),domain:routed.route,partial:finishReason==='length'});
   } catch(err){console.error('BAYE gateway error',err);res.status(502).json({error:'Le moteur IA rencontre un problème. Réessaie plus tard.'});}
 });
 
@@ -137,28 +142,38 @@ app.post('/api/agent', generationLimiter, async (req,res)=>{
 const falModels = {image:'fal-ai/flux/schnell',video:'fal-ai/kling-video/v2.1/standard/text-to-video'};
 app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
   try {
-    const falKey=process.env.FAL_KEY;
-    if(!falKey) return res.status(503).json({error:'Le service de génération média n’est pas configuré.'});
     const {prompt,type='image',image_url}=req.body||{};
     if(typeof prompt!=='string'||!prompt.trim()) return res.status(400).json({error:'Prompt requis.'});
-    if(prompt.length>4000) return res.status(400).json({error:'Prompt trop long (maximum 4 000 caractères).'});
+    if(prompt.length>2048) return res.status(400).json({error:'Prompt trop long (maximum 2 048 caractères pour le modèle image).'});
     if(!['image','video'].includes(type)) return res.status(400).json({error:'Type invalide.'});
-    if(type==='video'&&image_url){
+    if(type==='image'){
+      const generated=await generateCloudflareImage({prompt:prompt.trim()});
+      return res.json(generated);
+    }
+    const falKey=process.env.FAL_KEY;
+    if(!falKey) return res.status(503).json({code:'VIDEO_PROVIDER_NOT_CONFIGURED',error:'La génération vidéo nécessite la configuration d’un fournisseur vidéo. Aucun coût ne sera déclenché automatiquement.'});
+    if(image_url){
       if(typeof image_url!=='string'||image_url.length>2048)return res.status(400).json({error:'URL image invalide.'});
       try{const parsed=new URL(image_url);if(parsed.protocol!=='https:'||parsed.username||parsed.password)return res.status(400).json({error:'L’image doit utiliser une URL HTTPS valide.'});}
       catch{return res.status(400).json({error:'URL image invalide.'});}
     }
-    const model=falModels[type],payload={prompt};if(type==='video'&&image_url)payload.image_url=image_url;
+    const model=falModels.video,payload={prompt:prompt.trim()};if(image_url)payload.image_url=image_url;
     const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});
-    if(!upstream.ok){const detail=await upstream.text();console.error('fal submission error',upstream.status,detail.slice(0,300));const exhausted=upstream.status===403&&/exhausted balance|user is locked/i.test(detail);return res.status(502).json({code:exhausted?'PROVIDER_BALANCE_EXHAUSTED':'MEDIA_PROVIDER_REJECTED',error:exhausted?'Le fournisseur média externe a épuisé son solde. BAYE n’a pas pu lancer cette génération.':'Le fournisseur média externe a refusé cette demande. BAYE n’a pas pu lancer cette génération.'});}
-    const data=await upstream.json();res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type='+type+'&request_id='+encodeURIComponent(data.request_id)});
-  }catch(err){console.error('BAYE media error',err);res.status(500).json({error:'Erreur interne du générateur média.'});}
+    if(!upstream.ok){const detail=await upstream.text();console.error('fal video submission error',upstream.status,detail.slice(0,300));const exhausted=upstream.status===403&&/exhausted balance|user is locked/i.test(detail);return res.status(502).json({code:exhausted?'PROVIDER_BALANCE_EXHAUSTED':'MEDIA_PROVIDER_REJECTED',error:exhausted?'Le fournisseur vidéo externe a épuisé son solde. BAYE n’a pas pu lancer cette génération.':'Le fournisseur vidéo externe a refusé cette demande. BAYE n’a pas pu lancer cette génération.'});}
+    const data=await upstream.json();res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type=video&request_id='+encodeURIComponent(data.request_id)});
+  }catch(err){
+    if(err?.code==='MEDIA_NOT_CONFIGURED')return res.status(503).json({code:err.code,error:err.message});
+    if(err?.code==='MEDIA_INVALID_PROMPT')return res.status(400).json({code:err.code,error:err.message});
+    if(err?.code==='MEDIA_QUOTA_EXHAUSTED')return res.status(429).json({code:err.code,error:err.message});
+    if(err?.code==='MEDIA_PROVIDER_REJECTED'||err?.code==='MEDIA_EMPTY_RESULT')return res.status(502).json({code:err.code,error:err.message});
+    console.error('BAYE media error',err);res.status(500).json({error:'Erreur interne du générateur média.'});
+  }
 });
 app.get('/api/media/status', mediaStatusLimiter, async (req,res)=>{
   try{
-    const falKey=process.env.FAL_KEY;if(!falKey)return res.status(503).json({error:'Service média non configuré.'});
-    const {type,request_id}=req.query;if(!['image','video'].includes(type)||typeof request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(request_id))return res.status(400).json({error:'Paramètres invalides.'});
-    const model=falModels[type];const statusRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id+'/status',{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});
+    const falKey=process.env.FAL_KEY;if(!falKey)return res.status(503).json({error:'Service vidéo non configuré.'});
+    const {type,request_id}=req.query;if(type!=='video'||typeof request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(request_id))return res.status(400).json({error:'Paramètres invalides.'});
+    const model=falModels.video;const statusRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id+'/status',{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});
     if(!statusRes.ok)return res.status(502).json({error:'Impossible de vérifier la génération.'});
     const status=await statusRes.json();if(status.status!=='COMPLETED')return res.json({status:status.status});
     const resultRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id,{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});

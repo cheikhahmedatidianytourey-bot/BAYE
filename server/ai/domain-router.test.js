@@ -28,5 +28,7 @@ test('capability catalog does not overstate unavailable systems', () => {
   const catalog = getBayeCapabilityCatalog();
   assert.equal(catalog.runtime.formalProofVerification, false);
   assert.equal(catalog.runtime.independentMultiModelConsensus, false);
+  assert.equal(catalog.runtime.mediaProviders.image, 'cloudflare_workers_ai');
+  assert.equal(catalog.runtime.mediaProviders.video, 'external_fal_adapter');
   assert.ok(catalog.domains.length >= 15);
 });

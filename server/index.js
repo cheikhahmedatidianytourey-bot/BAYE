@@ -29,6 +29,33 @@ app.get('/api/payment-methods', (_req,res)=>res.json({
   securityPolicy:'No subscription is activated by a user statement, screenshot, or unverified callback. Server-side provider verification is required.'
 }));
 
+
+// BAYE Payment Verification Core v1: verification rules and transaction state primitives.
+// Provider webhook verification must be implemented with a provider-specific adapter before live payments.
+const paymentStates = new Set(['pending','paid','failed','cancelled','refunded']);
+function validatePaymentRecord(record){
+  if(!record||typeof record!=='object')return {valid:false,reason:'invalid_record'};
+  if(typeof record.transactionId!=='string'||! /^[a-zA-Z0-9_-]{8,200}$/.test(record.transactionId))return {valid:false,reason:'invalid_transaction_id'};
+  if(!Number.isSafeInteger(record.amount)||record.amount<=0)return {valid:false,reason:'invalid_amount'};
+  if(typeof record.currency!=='string'||! /^[A-Z]{3}$/.test(record.currency))return {valid:false,reason:'invalid_currency'};
+  if(!paymentStates.has(record.status))return {valid:false,reason:'invalid_status'};
+  return {valid:true};
+}
+app.post('/api/payment-verification/check-record', (req,res)=>{
+  // This endpoint validates record structure only; it does not authenticate a provider payment.
+  const result=validatePaymentRecord(req.body);
+  res.status(result.valid?200:400).json({valid:result.valid,reason:result.reason||'record_structure_valid',verification:'structure_only',paymentActivationAllowed:false});
+});
+app.get('/api/payment-verification/status', (_req,res)=>res.json({
+  core:'BAYE Payment Verification Core v1',
+  mode:'structure_validation_only',
+  providerAdaptersConfigured:false,
+  livePaymentVerification:false,
+  activationRequiresVerifiedProviderWebhook:true,
+  checks:['transaction id format','positive integer amount','ISO currency code format','known transaction status'],
+  note:'Record validation is not proof of payment. Live activation requires provider authentication, amount/currency/order matching, replay protection, and persistent transaction storage.'
+}));
+
 async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0.4}){
   const upstream=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages,max_tokens,temperature})});
   if(!upstream.ok){const detail=await upstream.text();console.error('AI provider error',upstream.status,detail.slice(0,500));throw new Error('provider');}

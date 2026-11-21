@@ -41,7 +41,7 @@ app.post('/api/generate', async (req,res)=>{
   } catch(err){console.error('BAYE gateway error',err);res.status(502).json({error:'Le moteur IA rencontre un problème. Réessaie plus tard.'});}
 });
 
-// Agent v3: bounded planning, text execution and quality review; no external actions.
+// BAYE Agent: two-call cost-conscious workflow (plan + final with built-in quality review).
 app.post('/api/agent', async (req,res)=>{
   try{
     const {prompt,kind='Texte'}=req.body||{};
@@ -54,19 +54,13 @@ app.post('/api/agent', async (req,res)=>{
     const planResponse=await callAI({key,endpoint,model,messages:[
       {role:'system',content:'Tu es BAYE Agent, planificateur. Transforme l’objectif en plan bref de 3 à 5 étapes réalisables en génération de texte uniquement. Ne planifie aucune action externe, aucun achat, aucune publication, aucune modification de compte ni commande système. Retourne une liste numérotée simple.'},
       {role:'user',content:prompt}
-    ],max_tokens:1200,temperature:0.2});
+    ],max_tokens:900,temperature:0.2});
     const plan=planResponse.piece;
-    const draftResponse=await callAI({key,endpoint,model,messages:[
-      {role:'system',content:buildBayeCorePrompt(kind)+' Tu es BAYE Agent. Réalise le plan fourni en produisant une réponse textuelle. Ne prétends pas avoir réalisé d actions externes.'},
-      {role:'user',content:'Objectif : '+prompt+'\nPlan :\n'+plan}
-    ],max_tokens:5000,temperature:0.5});
-    const draft=draftResponse.piece;
-    const reviewedResponse=await callAI({key,endpoint,model,messages:[
-      {role:'system',content:'Tu es le contrôleur qualité final de BAYE. Corrige les erreurs, contradictions, omissions et affirmations non vérifiées dans le brouillon. Ne prétends pas avoir vérifié des sources ou exécuté des actions. Retourne la version finale uniquement.'},
-      {role:'user',content:'Objectif : '+prompt+'\nPlan :\n'+plan+'\nBrouillon :\n'+draft}
-    ],max_tokens:5000,temperature:0.2});
-    const reviewed=reviewedResponse.piece;
-    res.json({result:reviewed,plan,model,core:{...getCoreInfo(),agentMode:'plan-draft-review',steps:3},verifiedByReview:true});
+    const finalResponse=await callAI({key,endpoint,model,messages:[
+      {role:'system',content:buildBayeCorePrompt(kind)+' Tu es BAYE Agent. Réalise le plan fourni. Avant de répondre, vérifie silencieusement les erreurs, omissions, contradictions, sécurité et affirmations non vérifiées; corrige-les. Ne prétends pas avoir réalisé d actions externes ni consulté des sources. Retourne directement la réponse finale.'},
+      {role:'user',content:'Objectif : '+prompt+'\\nPlan :\\n'+plan}
+    ],max_tokens:4500,temperature:0.4});
+    res.json({result:finalResponse.piece,plan,model,core:{...getCoreInfo(),agentMode:'plan-and-integrated-review',steps:2},verifiedByReview:true});
   }catch(err){console.error('BAYE agent error',err);res.status(502).json({error:'BAYE Agent n’a pas pu terminer. Réessaie plus tard.'});}
 });
 const falModels = {image:'fal-ai/flux/schnell',video:'fal-ai/kling-video/v2.1/standard/text-to-video'};

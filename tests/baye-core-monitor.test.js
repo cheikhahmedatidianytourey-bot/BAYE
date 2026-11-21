@@ -27,3 +27,11 @@ test('monitor marks HTTP error endpoint unhealthy',async()=>{
   try{const result=await checkEndpoint('http://127.0.0.1:'+address.port);assert.equal(result.ok,false);assert.equal(result.status,503);}
   finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+test('monitor handles endpoint timeout',async()=>{
+  const server=createServer(()=>{});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const address=server.address();
+  try{const result=await checkEndpoint('http://127.0.0.1:'+address.port,100);assert.equal(result.ok,false);assert.equal(result.error,'Timeout');}
+  finally{server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));}
+});

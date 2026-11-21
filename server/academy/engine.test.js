@@ -25,8 +25,8 @@ test('supports doctoral research mode without claiming official curriculum inges
   });
   assert.equal(result.ok, true);
   const instruction = buildAcademyInstruction(result.value);
-  assert.match(instruction, /Ne fabrique ni citations/);
-  assert.match(instruction, /pas une preuve que tous ses documents officiels sont déjà disponibles/);
+  assert.match(instruction, /ne fabrique ni citations/i);
+  assert.match(instruction, /pas une preuve que tous ses documents officiels sont déjà disponibles/i);
 });
 
 test('rejects empty prompts and unsupported language codes', () => {

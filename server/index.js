@@ -139,18 +139,18 @@ app.post('/api/generate', generationLimiter, async (req,res)=>{
     if(!key) return res.status(503).json({error:'Le moteur IA n’est pas encore configuré. Réessaie plus tard.'});
     const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
-    let output='',finishReason='stop';
+    let output='',finishReason='stop',actualModel=model,providerId='primary';
     const routed = buildDomainSystemPrompt(kind, prompt);
     const messages=[{role:'system',content:routed.systemPrompt},{role:'user',content:prompt}];
     for(let part=0;part<3;part++){
       const response=await callAI({key,endpoint,model,messages,max_tokens:8192,temperature:0.7});
-      output+=response.piece;finishReason=response.finishReason;
+      output+=response.piece;finishReason=response.finishReason;actualModel=response.model||actualModel;providerId=response.providerId||providerId;
       if(finishReason!=='length'||part===2)break;
       messages.push({role:'assistant',content:response.piece},{role:'user',content:'Continue exactly where you stopped, without repeating. Complete the answer.'});
     }
     const outputVerification=verifyTextOutput(output,{label:'generation_result',maxLength:100000});
     if(!outputVerification.passed)return res.status(502).json({error:'BAYE a produit une sortie invalide. Réessaie.',verification:outputVerification});
-    res.json({result:output,model,core:getCoreInfo(),domain:routed.route,partial:finishReason==='length',verification:{passed:true,scope:'structural_only',checks:outputVerification.checks}});
+    res.json({result:output,model:actualModel,provider:providerId,core:getCoreInfo(),domain:routed.route,partial:finishReason==='length',verification:{passed:true,scope:'structural_only',checks:outputVerification.checks}});
   } catch(err){console.error('BAYE gateway error',err);res.status(502).json({error:'Le moteur IA rencontre un problème. Réessaie plus tard.'});}
 });
 
@@ -178,7 +178,7 @@ app.post('/api/agent', generationLimiter, async (req,res)=>{
     ],max_tokens:4500,temperature:0.4});
     const outputVerification=verifyTextOutput(finalResponse.piece,{label:'final_response',maxLength:40000});
     if(!outputVerification.passed)return res.status(502).json({error:'BAYE Agent a produit une réponse invalide. Réessaie.',verification:outputVerification});
-    res.json({result:finalResponse.piece,plan,model,core:{...getCoreInfo(),agentMode:'prompted-review-plus-structural-verification',steps:2},verification:{passed:true,scope:'structural_only',plan:planVerification,result:outputVerification}});
+    res.json({result:finalResponse.piece,plan,model:finalResponse.model||model,provider:finalResponse.providerId||'primary',core:{...getCoreInfo(),agentMode:'prompted-review-plus-structural-verification',steps:2},verification:{passed:true,scope:'structural_only',plan:planVerification,result:outputVerification}});
   }catch(err){console.error('BAYE agent error',err);res.status(502).json({error:'BAYE Agent n’a pas pu terminer. Réessaie plus tard.'});}
 });
 const falModels = {image:'fal-ai/flux/schnell',video:'fal-ai/kling-video/v2.1/standard/text-to-video'};

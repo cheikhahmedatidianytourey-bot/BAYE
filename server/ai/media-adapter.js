@@ -25,7 +25,7 @@ export async function generateCloudflareImage({prompt,env=process.env,fetchImpl=
       const message=rawMessage
         .replaceAll(String(env.CLOUDFLARE_API_TOKEN),'[REDACTED]')
         .replaceAll(String(env.CLOUDFLARE_ACCOUNT_ID),'[REDACTED]')
-        .replace(/[\\r\\n\\t]+/g,' ')
+        .replace(/[\r\n\t]+/g,' ')
         .slice(0,240);
       return {code:Number.isFinite(Number(rawCode))?Number(rawCode):undefined,message:message||'Cloudflare a retourné une erreur sans détail.'};
     });

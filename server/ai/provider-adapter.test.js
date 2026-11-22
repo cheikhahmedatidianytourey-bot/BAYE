@@ -140,4 +140,17 @@ test('rejects invalid message payloads and out-of-range request options before n
   await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], timeoutMs: 500, fetchImpl }), /timeout/);
   assert.equal(calls, 0);
 });
-\n\ntest('rejects oversized declared provider response and tries configured fallback', async () => {\n  const result = await requestAICompletion({\n    primary,\n    env: { AI_FALLBACK_API_KEY: 'fallback-secret', AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1', AI_FALLBACK_MODEL: 'fallback-model' },\n    messages: [{ role: 'user', content: 'test' }],\n    fetchImpl: async (url) => url.startsWith('https://primary.example')\n      ? { ok: true, headers: { get: () => String(6 * 1024 * 1024) }, json: async () => { throw new Error('should not parse oversized response'); } }\n      : { ok: true, json: async () => ({ choices: [{ message: { content: 'fallback safe' } }] }) }\n  });\n  assert.equal(result.providerId, 'fallback');\n  assert.equal(result.piece, 'fallback safe');\n});\n
+
+
+test('rejects oversized declared provider response and tries configured fallback', async () => {
+  const result = await requestAICompletion({
+    primary,
+    env: { AI_FALLBACK_API_KEY: 'fallback-secret', AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1', AI_FALLBACK_MODEL: 'fallback-model' },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async (url) => url.startsWith('https://primary.example')
+      ? { ok: true, headers: { get: () => String(6 * 1024 * 1024) }, json: async () => { throw new Error('should not parse oversized response'); } }
+      : { ok: true, json: async () => ({ choices: [{ message: { content: 'fallback safe' } }] }) }
+  });
+  assert.equal(result.providerId, 'fallback');
+  assert.equal(result.piece, 'fallback safe');
+});

@@ -11,8 +11,7 @@ test('rejects oversized declared responses before parsing', async () => {
   let cancelled = false;
   const response = {
     headers: { get: () => '101' },
-    body: { cancel: async () => { cancelled = true; } },
-    json: async () => { throw new Error('must not parse'); }
+    body: { cancel: async () => { cancelled = true; } }
   };
   await assert.rejects(readJsonLimited(response, 100), /size limit/);
   assert.equal(cancelled, true);

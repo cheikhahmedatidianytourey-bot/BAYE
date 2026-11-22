@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildBayeCorePrompt, getCoreInfo } from '../server/baye-core.js';
-import { checkEndpoint } from '../server/baye-monitor.js';
+import { checkEndpoint, runMonitor } from '../server/baye-monitor.js';
 import { createServer } from 'node:http';
 
 test('core info exposes expected name and version',()=>{
@@ -34,4 +34,16 @@ test('monitor handles endpoint timeout',async()=>{
   const address=server.address();
   try{const result=await checkEndpoint('http://127.0.0.1:'+address.port,100);assert.equal(result.ok,false);assert.equal(result.error,'Timeout');}
   finally{server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));}
+});
+
+test('concurrent SENTINEL requests share one monitoring cycle',async()=>{
+  const originalFetch=globalThis.fetch;
+  let calls=0;
+  globalThis.fetch=async()=>{calls++;await new Promise(resolve=>setTimeout(resolve,20));return new Response('ok',{status:200});};
+  try{
+    const [first,second]=await Promise.all([runMonitor(),runMonitor()]);
+    assert.equal(first,second);
+    assert.equal(calls,2);
+    assert.equal(first.overallOk,true);
+  }finally{globalThis.fetch=originalFetch;}
 });

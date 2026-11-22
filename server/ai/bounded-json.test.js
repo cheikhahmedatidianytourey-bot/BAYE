@@ -26,3 +26,14 @@ test('rejects streamed responses exceeding the limit without content length', as
 test('rejects invalid configured limits', async () => {
   await assert.rejects(readJsonLimited(new Response('{}'), 0), /maxBytes/);
 });
+
+test('refuses non-streaming JSON bodies to avoid unbounded parsing', async () => {
+  let cancelled = false;
+  const response = {
+    headers: { get: () => null },
+    body: { cancel: async () => { cancelled = true; } },
+    json: async () => { throw new Error('must not parse'); }
+  };
+  await assert.rejects(readJsonLimited(response, 100), /stream is unavailable/);
+  assert.equal(cancelled, true);
+});

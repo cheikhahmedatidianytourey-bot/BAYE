@@ -2,9 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+const MAX_SENTINEL_FILE_BYTES = 2 * 1024 * 1024;
+
 export class SentinelHistoryStore {
   constructor({filePath=process.env.BAYE_SENTINEL_HISTORY_FILE||'/data/baye-sentinel-history.json',maxEntries=100}={}) {
-    if(!Number.isSafeInteger(maxEntries)||maxEntries<1)throw new TypeError('maxEntries must be a positive safe integer.');
+    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>1000)throw new TypeError('maxEntries must be a positive safe integer.');
     if(typeof filePath!=='string'||!filePath.trim())throw new TypeError('filePath must be a non-empty string.');
     this.filePath=filePath;
     this.maxEntries=maxEntries;
@@ -12,6 +14,8 @@ export class SentinelHistoryStore {
 
   async load() {
     try {
+      const stat=await fs.stat(this.filePath);
+      if(stat.size>MAX_SENTINEL_FILE_BYTES)throw new Error('SENTINEL history exceeds the configured size limit.');
       const parsed=JSON.parse(await fs.readFile(this.filePath,'utf8'));
       if (!Array.isArray(parsed)) throw new Error('Invalid SENTINEL history format.');
       return parsed.filter(entry=>this.#validEntry(entry)).slice(0,this.maxEntries);
@@ -22,8 +26,8 @@ export class SentinelHistoryStore {
   }
 
   #validEntry(entry){
-    if(!entry||typeof entry!=='object'||Array.isArray(entry)||typeof entry.checkedAt!=='string'||!Number.isFinite(Date.parse(entry.checkedAt))||typeof entry.overallOk!=='boolean'||!Array.isArray(entry.results))return false;
-    return entry.results.length<=10&&entry.results.every(result=>result&&typeof result==='object'&&!Array.isArray(result)&&typeof result.name==='string'&&result.name.length<=200&&typeof result.ok==='boolean');
+    if(!entry||typeof entry!=='object'||Array.isArray(entry)||Object.keys(entry).some(key=>!['checkedAt','overallOk','results'].includes(key))||typeof entry.checkedAt!=='string'||!Number.isFinite(Date.parse(entry.checkedAt))||typeof entry.overallOk!=='boolean'||!Array.isArray(entry.results))return false;
+    return entry.results.length<=10&&entry.results.every(result=>result&&typeof result==='object'&&!Array.isArray(result)&&Object.keys(result).every(key=>['name','ok'].includes(key))&&typeof result.name==='string'&&result.name.length<=200&&typeof result.ok==='boolean');
   }
 
   async save(entries) {

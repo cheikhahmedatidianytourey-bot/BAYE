@@ -17,7 +17,7 @@ export async function generateCloudflareImage({prompt,env=process.env,fetchImpl=
   }
   const url='https://api.cloudflare.com/client/v4/accounts/'+encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)+'/ai/run/'+IMAGE_MODEL;
   const response=await fetchImpl(url,{method:'POST',headers:{Authorization:'Bearer '+env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({prompt,steps:4}),signal:AbortSignal.timeout(90000)});
-  const data=await readJsonLimited(response).catch(()=>null);
+  const data=await readJsonLimited(response, 12 * 1024 * 1024).catch(()=>null);
   if(!response.ok||data?.success===false){
     // Keep provider diagnostics useful while never returning credentials or request headers.
     const rawErrors=Array.isArray(data?.errors)?data.errors:[];

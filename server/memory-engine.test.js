@@ -67,3 +67,23 @@ test('memory refuses oversized persisted files before parsing',async()=>{
     await assert.rejects(engine.readAll(),/size limit/);
   }finally{await fs.rm(dir,{recursive:true,force:true});}
 });
+
+
+test('memory filters persisted records outside the current schema and bounds',async()=>{
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'baye-memory-schema-'));
+  try{
+    const file=path.join(dir,'memory.json');
+    const validLegacy={id:'legacy-1',text:'legacy record',tags:['safe']};
+    const invalid=[
+      {...validLegacy,unexpected:true},
+      {...validLegacy,id:'x'.repeat(201)},
+      {...validLegacy,text:'x'.repeat(4001)},
+      {...validLegacy,tags:Array(21).fill('tag')},
+      {...validLegacy,tags:['x'.repeat(51)]},
+      {...validLegacy,createdAt:'not-a-date'}
+    ];
+    await fs.writeFile(file,JSON.stringify([validLegacy,...invalid]));
+    const engine=new MemoryEngine({filePath:file});
+    assert.deepEqual(await engine.readAll(),[validLegacy]);
+  }finally{await fs.rm(dir,{recursive:true,force:true});}
+});

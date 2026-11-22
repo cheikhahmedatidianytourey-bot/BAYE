@@ -1,4 +1,6 @@
-const MAX_PROVIDER_RESPONSE_BYTES = 5 * 1024 * 1024;\n\nfunction normalizeEndpoint(value) {
+const MAX_PROVIDER_RESPONSE_BYTES = 5 * 1024 * 1024;
+
+function normalizeEndpoint(value) {
   const raw = String(value || '').trim().replace(/\/$/, '');
   if (!raw) return '';
   return raw.endsWith('/chat/completions') ? raw : raw + '/chat/completions';
@@ -62,7 +64,12 @@ export async function requestAICompletion({
         failures.push({ provider: provider.id, status: response.status });
         continue;
       }
-      const declaredLength = Number(response.headers?.get?.('content-length'));\n      if (Number.isFinite(declaredLength) && declaredLength > MAX_PROVIDER_RESPONSE_BYTES) {\n        failures.push({ provider: provider.id, status: 'response_too_large' });\n        continue;\n      }\n      const data = await response.json();
+      const declaredLength = Number(response.headers?.get?.('content-length'));
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_PROVIDER_RESPONSE_BYTES) {
+        failures.push({ provider: provider.id, status: 'response_too_large' });
+        continue;
+      }
+      const data = await response.json();
       const choice = data?.choices?.[0];
       const piece = choice?.message?.content;
       if (typeof piece !== 'string' || !piece.trim()) {

@@ -16,3 +16,12 @@ test('rejects insecure, local, IP, credential, port and malformed URLs',()=>{
     'https://localhost.example/a'
   ])assert.equal(validatePublicImageUrl(value),false,value);
 });
+
+
+test('rejects numeric and hexadecimal host representations',()=>{
+  for(const value of ['https://2130706433/a','https://127.1/a','https://0x7f.0x0.0x0.0x1/a','https://123.example.com/a'])assert.equal(validatePublicImageUrl(value),false,value);
+});
+
+test('accepts normalized trailing-dot public hostname',()=>{
+  assert.equal(validatePublicImageUrl('https://example.com./image.png'),true);
+});

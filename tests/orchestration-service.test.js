@@ -38,3 +38,33 @@ test('returns a failed task state when a provider call fails',async()=>{
 test('requires a provider completion function',async()=>{
  await assert.rejects(()=>runBayeOrchestration({tasks:[task('research')]}),/complétion IA requis/);
 });
+
+test('runs semantic review only when explicitly requested',async()=>{
+ const calls=[];
+ const result=await runBayeOrchestration({
+  tasks:[task('research'),task('engineering','engineering')],
+  reviewMode:'semantic',
+  complete:async(messages,options)=>{
+   calls.push({messages,options});
+   if(messages[0].content.includes('Semantic Review'))return {piece:JSON.stringify({summary:'Two reports disagree on the deployment strategy.',findings:[{type:'contradiction',severity:'medium',taskIds:['research','engineering'],explanation:'The reports recommend incompatible deployment approaches.',question:'Which operational constraint decides the choice?'}],recommendedFollowUp:['Validate deployment constraints.']}),model:'mock-reviewer'};
+   return {piece:'Specialist report for '+calls.length};
+  }
+ });
+ assert.equal(calls.length,3);
+ assert.equal(result.review.semantic.status,'completed');
+ assert.equal(result.review.semantic.findings[0].type,'contradiction');
+ assert.equal(result.review.semantic.independentFactVerification,false);
+});
+test('does not spend a second model call in deterministic review mode',async()=>{
+ let calls=0;
+ const result=await runBayeOrchestration({tasks:[task('research'),task('engineering','engineering')],complete:async()=>{calls++;return {piece:'A report '+calls};}});
+ assert.equal(calls,2);
+ assert.equal(result.review.semantic,null);
+});
+test('keeps orchestration usable when semantic reviewer output is malformed',async()=>{
+ let calls=0;
+ const result=await runBayeOrchestration({tasks:[task('research'),task('engineering','engineering')],reviewMode:'semantic',complete:async()=>{calls++;return {piece:calls===3?'not json':'Specialist report '+calls};}});
+ assert.equal(result.status,'succeeded');
+ assert.equal(result.review.semantic.status,'unavailable');
+ assert.equal(calls,3);
+});

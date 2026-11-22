@@ -1,3 +1,4 @@
+import { readJsonLimited } from './bounded-json.js';
 const MAX_PROVIDER_RESPONSE_BYTES = 5 * 1024 * 1024;
 
 function normalizeEndpoint(value) {

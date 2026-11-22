@@ -154,3 +154,28 @@ test('rejects oversized declared provider response and tries configured fallback
   assert.equal(result.providerId, 'fallback');
   assert.equal(result.piece, 'fallback safe');
 });
+
+
+test('bounds streamed provider responses even without a content-length header', async () => {
+  let primaryJsonParsed = false;
+  const result = await requestAICompletion({
+    primary,
+    env: { AI_FALLBACK_API_KEY: 'fallback-secret', AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1', AI_FALLBACK_MODEL: 'fallback-model' },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async (url) => {
+      if (url.startsWith('https://primary.example')) {
+        const body = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(5 * 1024 * 1024 + 1));
+            controller.close();
+          }
+        });
+        return { ok: true, headers: { get: () => null }, body, json: async () => { primaryJsonParsed = true; } };
+      }
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'bounded fallback' } }] }) };
+    }
+  });
+  assert.equal(primaryJsonParsed, false);
+  assert.equal(result.providerId, 'fallback');
+  assert.equal(result.piece, 'bounded fallback');
+});

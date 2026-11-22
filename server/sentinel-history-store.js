@@ -1,11 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import crypto from 'node:crypto';
 
 const MAX_SENTINEL_FILE_BYTES = 2 * 1024 * 1024;
 
 export class SentinelHistoryStore {
-  constructor({filePath=process.env.BAYE_SENTINEL_HISTORY_FILE||'/data/baye-sentinel-history.json',maxEntries=100}={}) {
+  constructor({filePath=process.env.BAYE_SENTINEL_HISTORY_FILE||path.join(os.tmpdir(),'baye-sentinel-history.json'),maxEntries=100}={}) {
     if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>1000)throw new TypeError('maxEntries must be a positive safe integer.');
     if(typeof filePath!=='string'||!filePath.trim())throw new TypeError('filePath must be a non-empty string.');
     this.filePath=filePath;

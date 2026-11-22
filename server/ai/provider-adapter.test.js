@@ -44,7 +44,7 @@ test('uses explicit fallback when primary returns an empty response', async () =
       AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1',
       AI_FALLBACK_MODEL: 'fallback-model'
     },
-    messages: [],
+    messages: [{ role: 'user', content: 'test' }],
     fetchImpl: async (url) => {
       calls.push(url);
       return url.startsWith('https://primary.example')
@@ -62,7 +62,7 @@ test('does not silently invent a fallback provider', async () => {
   await assert.rejects(() => requestAICompletion({
     primary,
     env: {},
-    messages: [],
+    messages: [{ role: 'user', content: 'test' }],
     fetchImpl: async () => { calls++; return { ok: false, status: 503 }; }
   }), /All configured AI providers failed/);
   assert.equal(calls, 1);
@@ -72,7 +72,7 @@ test('provider failure summary contains status but never credentials', async () 
   await assert.rejects(() => requestAICompletion({
     primary,
     env: {},
-    messages: [],
+    messages: [{ role: 'user', content: 'test' }],
     fetchImpl: async () => ({ ok: false, status: 401 })
   }), error => {
     assert.match(error.message, /primary:401/);
@@ -102,7 +102,7 @@ test('malformed provider JSON triggers explicit fallback rather than crashing', 
       AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1',
       AI_FALLBACK_MODEL: 'fallback-model'
     },
-    messages: [],
+    messages: [{ role: 'user', content: 'test' }],
     fetchImpl: async (url) => url.startsWith('https://primary.example')
       ? { ok: true, json: async () => { throw new Error('malformed'); } }
       : { ok: true, json: async () => ({ choices: [{ message: { content: 'safe fallback' } }] }) }
@@ -120,7 +120,7 @@ test('timeout or network exception falls through only to explicitly configured p
       AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1',
       AI_FALLBACK_MODEL: 'fallback-model'
     },
-    messages: [],
+    messages: [{ role: 'user', content: 'test' }],
     fetchImpl: async (url) => {
       calls++;
       if (url.startsWith('https://primary.example')) throw new Error('timeout');
@@ -130,3 +130,5 @@ test('timeout or network exception falls through only to explicitly configured p
   assert.equal(calls, 2);
   assert.equal(result.providerId, 'fallback');
 });
+
+test('rejects invalid message payloads and out-of-range request options before network access', async () => {\n  let calls = 0;\n  const fetchImpl = async () => { calls++; };\n  await assert.rejects(() => requestAICompletion({ primary, messages: [], fetchImpl }), /messages/);\n  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], max_tokens: 0, fetchImpl }), /max_tokens/);\n  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], temperature: 3, fetchImpl }), /temperature/);\n  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], timeoutMs: 500, fetchImpl }), /timeout/);\n  assert.equal(calls, 0);\n});\n

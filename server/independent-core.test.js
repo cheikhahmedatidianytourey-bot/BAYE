@@ -8,7 +8,7 @@ test('status exposes model runtime milestone',()=>assert.ok(getIndependentCoreSt
 test('rejects empty mission',()=>assert.throws(()=>buildMissionPlan('')));
 test('status does not claim a trained foundation model',()=>assert.equal(getIndependentCoreStatus().trainedFoundationModel,false));
 
-import {runOwnedRuntime,tokenize from './owned-runtime.js';
+import {runOwnedRuntime,tokenize} from './owned-runtime.js';
 test('runtime handles a valid mission without providers',()=>{const r=runOwnedRuntime('Build an API');assert.equal(r.providerIndependent,true);assert.equal(r.executionAvailable,false);assert.equal(r.response.plan.length,5);});
 test('tokenizer extracts words and numbers',()=>assert.deepEqual(tokenize('BAYE v0.1 core'),['baye','v0','1','core']));
 test('runtime rejects blank input',()=>assert.throws(()=>runOwnedRuntime('  ')));

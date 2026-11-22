@@ -17,3 +17,5 @@ test('documentary style and empty prompts',()=>{
  assert.match(buildVideoPrompt({prompt:'Market.',videoLook:'documentary'}),/observational documentary/);
  assert.equal(buildVideoPrompt({prompt:'  '}),'');
 });
+
+test('caps the original scene description before adding realism directions',()=>{\n const long='x'.repeat(3000);\n const result=buildVideoPrompt({prompt:long});\n assert.ok(result.startsWith('x'.repeat(1200)));\n assert.ok(result.length<2048);\n});\n

@@ -24,7 +24,7 @@ export const BAYE_DOMAINS = Object.freeze([
 ]);
 
 const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const escapeRegex = value => value.replace(/[.*+?^${}()|[\\]\\]/g, '\\const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();');
+const escapeRegex = value => [...value].map(char => '.*+?^${}()|[]\\'.includes(char) ? '\\' + char : char).join('');
 const matchesTerm = (text, term) => {
   const normalizedTerm = normalize(term).trim();
   if (!normalizedTerm) return false;

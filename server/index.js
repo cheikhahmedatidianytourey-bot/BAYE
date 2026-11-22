@@ -11,6 +11,7 @@ import { buildDomainSystemPrompt, getBayeCapabilityCatalog } from './ai/domain-r
 import { requestAICompletion, getAIProviderStatus } from './ai/provider-adapter.js';
 import { generateCloudflareImage, getMediaProviderStatus } from './ai/media-adapter.js';
 import { verifyTextOutput } from './verification-layer.js';
+import { validatePublicImageUrl } from './ai/image-url-validation.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -192,9 +193,7 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
     const falKey=process.env.FAL_KEY;
     if(!falKey) return res.status(503).json({code:'VIDEO_PROVIDER_NOT_CONFIGURED',error:'La génération vidéo nécessite la configuration d’un fournisseur vidéo. Aucun coût ne sera déclenché automatiquement.'});
     if(image_url){
-      if(typeof image_url!=='string'||image_url.length>2048)return res.status(400).json({error:'URL image invalide.'});
-      try{const parsed=new URL(image_url);const host=parsed.hostname.toLowerCase();const blockedHost=host==='localhost'||host.endsWith('.localhost')||host.endsWith('.local')||host.endsWith('.internal')||host.endsWith('.test')||host.endsWith('.invalid')||host.endsWith('.example')||host.includes(':')||/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host);if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.port||blockedHost)return res.status(400).json({error:'L’image doit utiliser une URL HTTPS publique valide, sans port ni adresse locale.'});}
-      catch{return res.status(400).json({error:'URL image invalide.'});}
+      if(!validatePublicImageUrl(image_url))return res.status(400).json({error:'L’image doit utiliser une URL HTTPS publique valide, sans port ni adresse locale.'});
     }
     const model=falModels.video,payload={prompt:prompt.trim()};if(image_url)payload.image_url=image_url;
     const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});

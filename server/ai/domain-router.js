@@ -23,7 +23,7 @@ export const BAYE_DOMAINS = Object.freeze([
   { id: 'general', label: 'Connaissances générales', terms: [] }
 ]);
 
-const normalize = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 const DOMAIN_METHODS = {
   mathematics: 'MÉTHODE MATHÉMATIQUE : définis les objets et hypothèses; vérifie les domaines et conditions; déroule les calculs sans sauts injustifiés; distingue preuve générale, exemple numérique, conjecture et calcul fini. Ne présente jamais un problème ouvert comme résolu.',

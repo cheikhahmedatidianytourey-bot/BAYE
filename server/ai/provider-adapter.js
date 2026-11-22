@@ -45,31 +45,7 @@ function validateRequestOptions(messages, max_tokens, temperature, timeoutMs) {
 }
 
 async function readProviderJsonLimited(response) {
-  if (!response.body?.getReader) return response.json();
-  const reader = response.body.getReader();
-  const chunks = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_PROVIDER_RESPONSE_BYTES) {
-        await reader.cancel().catch(() => {});
-        throw new Error('Provider response exceeds the configured size limit');
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return JSON.parse(new TextDecoder().decode(bytes));
+  return readJsonLimited(response, MAX_PROVIDER_RESPONSE_BYTES);
 }
 
 export async function requestAICompletion({

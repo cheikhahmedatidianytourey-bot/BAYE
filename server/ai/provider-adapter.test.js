@@ -131,4 +131,12 @@ test('timeout or network exception falls through only to explicitly configured p
   assert.equal(result.providerId, 'fallback');
 });
 
-test('rejects invalid message payloads and out-of-range request options before network access', async () => {\n  let calls = 0;\n  const fetchImpl = async () => { calls++; };\n  await assert.rejects(() => requestAICompletion({ primary, messages: [], fetchImpl }), /messages/);\n  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], max_tokens: 0, fetchImpl }), /max_tokens/);\n  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], temperature: 3, fetchImpl }), /temperature/);\n  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], timeoutMs: 500, fetchImpl }), /timeout/);\n  assert.equal(calls, 0);\n});\n
+test('rejects invalid message payloads and out-of-range request options before network access', async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls++; };
+  await assert.rejects(() => requestAICompletion({ primary, messages: [], fetchImpl }), /messages/);
+  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], max_tokens: 0, fetchImpl }), /max_tokens/);
+  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], temperature: 3, fetchImpl }), /temperature/);
+  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], timeoutMs: 500, fetchImpl }), /timeout/);
+  assert.equal(calls, 0);
+});

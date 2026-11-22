@@ -14,7 +14,7 @@ const modules=[
  {id:'verification',name:'Verification Layer',state:'scaffold'},
  {id:'memory',name:'Memory Layer',state:'foundation'},
  {id:'model_runtime',name:'Owned Runtime',state:'foundation'},
- {id:'tool_execution',name:'Tool Execution',state:'not_implemented'}
+ {id:'tool_execution',name:'Tool Execution',state:'limited_safe_tools'}
 ];
 export function classifyMission(text){
  const t=String(text||'').toLowerCase();
@@ -31,8 +31,8 @@ export function buildMissionPlan(text){
   {id:4,action:'Préparer l’exécution et les critères de vérification',status:'requires_runtime'},
   {id:5,action:'Évaluer le résultat et signaler les éléments non vérifiés',status:'requires_runtime'}
  ];
- return {core:'BAYE Independent Intelligence Core',version:'0.2.0',mode:'provider-free planning',domain,mission,modules:['mission_router','planner','verification'],steps,executionAvailable:false,verificationRequired:true,disclaimer:'Le noyau planifie et route de façon déterministe. Il ne constitue pas encore un modèle génératif autonome et ne réalise pas les étapes externes.'};
+ return {core:'BAYE Independent Intelligence Core',version:'0.2.0',mode:'provider-free planning',domain,mission,modules:['mission_router','planner','verification','tool_execution'],steps,executionAvailable:true,executionScope:'limited deterministic tools only',verificationRequired:true,disclaimer:'Le noyau planifie et route de façon déterministe. Il ne constitue pas encore un modèle génératif autonome et ne réalise pas les étapes externes.'};
 }
 export function getIndependentCoreStatus(){
- return {name:'BAYE Independent Intelligence Core',version:'0.2.0',status:'foundation',providerIndependent:true,trainedFoundationModel:false,executionEnabled:false,capabilities:['mission routing','deterministic task planning','module status','verification planning','bounded JSON memory (token protected)'],modules,nextMilestones:['persistent disk provisioning and memory durability check','trained neural model (dataset, training and evaluation required)','verified tool execution with approvals','benchmark and improvement pipeline']};
+ return {name:'BAYE Independent Intelligence Core',version:'0.2.0',status:'foundation',providerIndependent:true,trainedFoundationModel:false,executionEnabled:true,executionScope:'limited safe deterministic tools; no external actions',capabilities:['mission routing','deterministic task planning','module status','verification planning','bounded JSON memory (token protected)','safe calculator','text statistics'],modules,nextMilestones:['persistent disk provisioning and memory durability check','trained neural model (dataset, training and evaluation required)','verified external tool execution with approvals','benchmark and improvement pipeline']};
 }

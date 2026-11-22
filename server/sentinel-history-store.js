@@ -12,11 +12,16 @@ export class SentinelHistoryStore {
     try {
       const parsed=JSON.parse(await fs.readFile(this.filePath,'utf8'));
       if (!Array.isArray(parsed)) throw new Error('Invalid SENTINEL history format.');
-      return parsed.slice(0,this.maxEntries);
+      return parsed.filter(entry=>this.#validEntry(entry)).slice(0,this.maxEntries);
     } catch(error) {
       if (error?.code==='ENOENT') return [];
       throw error;
     }
+  }
+
+  #validEntry(entry){
+    if(!entry||typeof entry!=='object'||Array.isArray(entry)||typeof entry.checkedAt!=='string'||!Number.isFinite(Date.parse(entry.checkedAt))||typeof entry.overallOk!=='boolean'||!Array.isArray(entry.results))return false;
+    return entry.results.length<=10&&entry.results.every(result=>result&&typeof result==='object'&&typeof result.name==='string'&&typeof result.ok==='boolean');
   }
 
   async save(entries) {

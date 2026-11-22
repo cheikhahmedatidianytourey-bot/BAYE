@@ -214,7 +214,7 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
     const falKey=process.env.FAL_KEY;
     if(!falKey) return res.status(503).json({code:'VIDEO_PROVIDER_NOT_CONFIGURED',error:'La génération vidéo nécessite la configuration d’un fournisseur vidéo. Aucun coût ne sera déclenché automatiquement.'});
     if(image_url){
-      if(typeof image_url!=='string'||image_url.length>2048||!validatePublicImageUrl(image_url))return res.status(400).json({error:'L’image doit utiliser une URL HTTPS publique valide, sans port ni adresse locale.'});
+      if(typeof image_url!=='string'||image_url.length>2048||!(await validatePublicImageUrl(image_url)))return res.status(400).json({error:'L’image doit utiliser une URL HTTPS publique valide, sans port ni adresse locale.'});
     }
     const model=falModels.video,payload={prompt:prompt.trim()};if(image_url)payload.image_url=image_url;
     const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});

@@ -21,10 +21,32 @@ export function buildAIProviderChain(primary, env = process.env) {
   return chain;
 }
 
+function validateRequestOptions(messages, max_tokens, temperature, timeoutMs) {
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > 100) {
+    throw new Error('AI messages must be a non-empty array with at most 100 entries');
+  }
+  for (const message of messages) {
+    if (!message || !['system', 'user', 'assistant'].includes(message.role) ||
+        typeof message.content !== 'string' || message.content.length > 100000) {
+      throw new Error('AI message format is invalid');
+    }
+  }
+  if (!Number.isSafeInteger(max_tokens) || max_tokens < 1 || max_tokens > 100000) {
+    throw new Error('AI max_tokens is outside the supported range');
+  }
+  if (typeof temperature !== 'number' || !Number.isFinite(temperature) || temperature < 0 || temperature > 2) {
+    throw new Error('AI temperature is outside the supported range');
+  }
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 180000) {
+    throw new Error('AI timeout is outside the supported range');
+  }
+}
+
 export async function requestAICompletion({
   primary, env = process.env, messages, max_tokens = 4096, temperature = 0.4,
   fetchImpl = fetch, timeoutMs = 90000
 }) {
+  validateRequestOptions(messages, max_tokens, temperature, timeoutMs);
   const providers = buildAIProviderChain(primary, env);
   if (!providers.length) throw new Error('AI provider is not configured');
   const failures = [];

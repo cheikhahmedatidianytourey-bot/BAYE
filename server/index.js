@@ -19,6 +19,9 @@ import { readJsonLimited } from './ai/bounded-json.js';
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
 import { runBayeOrchestration } from './orchestration-service.js';
+import { PersistentMissionMemoryStore } from './mission-memory-store.js';
+import { requireBayeIdentity } from './identity-auth.js';
+import { validateMissionMemory } from './mission-memory.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -71,6 +74,40 @@ app.get('/api/memory/search',async(req,res)=>{try{res.json({items:await memoryEn
 app.post('/api/memory',async(req,res)=>{try{res.status(201).json(await memoryEngine.add(req.body||{}));}catch(err){res.status(400).json({error:err.message});}});
 app.delete('/api/memory/:id',async(req,res)=>{try{const removed=await memoryEngine.remove(req.params.id);res.json({removed});}catch(err){res.status(400).json({error:err.message});}});
 app.delete('/api/memory',async(req,res)=>{try{await memoryEngine.clear();res.json({cleared:true});}catch(_){res.status(500).json({error:'Unable to clear memory.'});}});
+ 
+// Persistent specialist mission memory. Every operation derives its owner from a verified token.
+const persistentMissionMemory=new PersistentMissionMemoryStore();
+const missionMemoryLimiter=rateLimit({windowMs:60_000,max:20,standardHeaders:true,legacyHeaders:false});
+app.get('/api/orchestration/memory/:missionId',missionMemoryLimiter,requireBayeIdentity,async(req,res)=>{
+ try{
+  const saved=await persistentMissionMemory.load({ownerId:req.bayeIdentity.subject,missionId:req.params.missionId});
+  if(!saved)return res.status(404).json({error:'Mémoire de mission introuvable.'});
+  res.json(saved);
+ }catch(err){
+  if(/identifier|mission/i.test(err.message||''))return res.status(400).json({error:'Identifiant de mission invalide.'});
+  res.status(503).json({error:'Mémoire persistante temporairement indisponible.'});
+ }
+});
+app.put('/api/orchestration/memory/:missionId',missionMemoryLimiter,requireBayeIdentity,async(req,res)=>{
+ try{
+  const packet=validateMissionMemory(req.body?.memory);
+  if(packet.missionId!==req.params.missionId)return res.status(400).json({error:'La mémoire ne correspond pas à cette mission.'});
+  const saved=await persistentMissionMemory.save({ownerId:req.bayeIdentity.subject,memory:req.body.memory});
+  res.status(201).json({saved:true,...saved});
+ }catch(err){
+  if(/mémoire|mission|identifiant|empreinte|entrée/i.test(err.message||''))return res.status(400).json({error:err.message});
+  res.status(503).json({error:'Mémoire persistante temporairement indisponible.'});
+ }
+});
+app.delete('/api/orchestration/memory/:missionId',missionMemoryLimiter,requireBayeIdentity,async(req,res)=>{
+ try{
+  const removed=await persistentMissionMemory.remove({ownerId:req.bayeIdentity.subject,missionId:req.params.missionId});
+  res.json({removed});
+ }catch(err){
+  if(/identifier|mission/i.test(err.message||''))return res.status(400).json({error:'Identifiant de mission invalide.'});
+  res.status(503).json({error:'Mémoire persistante temporairement indisponible.'});
+ }
+});
 
 app.get('/api/capabilities', (_req,res)=>res.json({ ...getBayeCapabilityCatalog(), providers: getAIProviderStatus(), media: getMediaProviderStatus() }));
 

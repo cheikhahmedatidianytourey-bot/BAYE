@@ -7,7 +7,7 @@ export function validatePublicImageUrl(value){
   if(typeof value!=='string'||value.length>2048||/[\\s\\u0000-\\u001f\\u007f]/.test(value))return false;
   try{
     const parsed=new URL(value);
-    const host=parsed.hostname.toLowerCase().replace(/\\.$/,'');
+    const host=parsed.hostname.toLowerCase().replace(/\.$/,'');
     const authority=value.slice(value.indexOf('//')+2).split(/[/?#]/,1)[0];
     const authorityHost=authority.slice(authority.lastIndexOf('@')+1);
     const explicitPort=authorityHost.startsWith('[')

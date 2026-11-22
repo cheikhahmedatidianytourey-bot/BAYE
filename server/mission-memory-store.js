@@ -57,10 +57,11 @@ export class PersistentMissionMemoryStore{
  async save({ownerId,memory}={}){
   const ownerKey=ownerKeyFor(ownerId);
   const validated=validateMissionMemory(memory);
+  const safeMemory={...validated,digest:memory.digest};
   return this.serialize(async()=>{
    const now=new Date().toISOString();
    const records=this.prune(await this.readAll()).filter(row=>!(row.ownerKey===ownerKey&&row.missionId===validated.missionId));
-   records.unshift({ownerKey,missionId:validated.missionId,updatedAt:now,memory});
+   records.unshift({ownerKey,missionId:validated.missionId,updatedAt:now,memory:safeMemory});
    await this.writeAll(records.slice(0,this.maxRecords));
    return {missionId:validated.missionId,updatedAt:now,entryCount:validated.entries.length};
   });

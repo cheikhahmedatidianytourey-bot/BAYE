@@ -7,7 +7,7 @@ export const BAYE_DOMAINS = Object.freeze([
   { id: 'biology', label: 'Biologie', terms: ['biologie', 'cellule', 'génétique', 'genetique', 'écologie', 'ecologie', 'organisme', 'adn'] },
   { id: 'medicine', label: 'Médecine et santé', terms: ['médecine', 'medecine', 'médical', 'medical', 'symptôme', 'symptome', 'diagnostic', 'traitement', 'santé', 'sante', 'posologie'] },
   { id: 'computer_science', label: 'Informatique et programmation', terms: ['code', 'programmer', 'programmation', 'javascript', 'python', 'typescript', 'api', 'algorithme', 'logiciel', 'base de données', 'base de donnees', 'bug', 'débogage', 'debug'] },
-  { id: 'engineering', label: 'Ingénierie', terms: ['ingénierie', 'ingenierie', 'ingénieur', 'ingenieur', 'moteur', 'robotique', 'électronique', 'electronique', 'mécatronique', 'mecatronique', 'structure', 'matériau', 'materiau'] },
+  { id: 'engineering', label: 'Ingénierie', terms: ['ingénierie', 'ingenierie', 'ingénieur', 'ingenieur', 'moteur', 'robot', 'robotique', 'électronique', 'electronique', 'mécatronique', 'mecatronique', 'structure', 'matériau', 'materiau'] },
   { id: 'ai', label: 'Intelligence artificielle', terms: ['intelligence artificielle', 'machine learning', 'deep learning', 'réseau neuronal', 'reseau neuronal', 'llm', 'modèle ia', 'modele ia', 'agent ia'] },
   { id: 'cybersecurity', label: 'Cybersécurité', terms: ['cybersécurité', 'cybersecurite', 'sécurité informatique', 'securite informatique', 'pentest', 'vulnérabilité', 'vulnerabilite', 'chiffrement', 'authentification'] },
   { id: 'economics', label: 'Économie et finance', terms: ['économie', 'economie', 'finance', 'comptabilité', 'comptabilite', 'budget', 'investissement', 'marché', 'marche', 'inflation'] },
@@ -60,7 +60,7 @@ export function routeBayeDomain(prompt, kind = 'Texte') {
   const best = ranked[0] || { domain: 'general', score: 0 };
   const selected = BAYE_DOMAINS.find(item => item.id === best.domain) || BAYE_DOMAINS.at(-1);
   // Secondary domains are included only when their score is meaningful relative to the top match.
-  const secondary = ranked.slice(1).filter(item => item.score >= 2 && item.score >= best.score * 0.5);
+  const secondary = ranked.slice(1).filter(item => item.score >= 1 && item.score >= best.score * 0.35);
   const disciplines = [best, ...secondary].map(item => {
     const domain = BAYE_DOMAINS.find(d => d.id === item.domain);
     return { id: item.domain, label: domain.label, score: item.score };

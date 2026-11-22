@@ -82,7 +82,7 @@ export function buildBayeCorePrompt(kind = 'Texte') {
     'Task specialization: ' + specialization,
     ...QUALITY_RULES,
     'Studio task type: ' + task
-  ].join('\\n');
+  ].join('\n');
 }
 
 export function getCoreInfo() {

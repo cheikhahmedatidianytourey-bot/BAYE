@@ -83,7 +83,7 @@ function getMonitorStatus(){
     historyFile:historyStore.filePath,
     status:latest?(latest.overallOk?'healthy':'attention_required'):'awaiting_first_check',
     capabilities:['periodic endpoint health checks','latency measurement','incident diagnostics','state-transition logging','bounded file-backed history'],
-    limitations:['Checks run only while this service process is running; hosting sleep/restarts interrupt them.','History survives process restarts only when BAYE_SENTINEL_HISTORY_FILE points to genuinely persistent storage (for example, a correctly mounted persistent disk).','No automatic remediation or external alert delivery.']};
+    limitations:['Checks run only while this service process is running; hosting sleep/restarts interrupt them.','History survives process restarts only when BAYE_SENTINEL_HISTORY_FILE points to genuinely persistent storage (for example, a correctly mounted persistent disk).','No automatic remediation or external alert delivery.','History writes and periodic scheduling are process-local; multiple service instances require shared coordination/storage before being enabled safely.']};
 }
 function getMonitorHistory(limit=20){
   const n=Math.max(1,Math.min(50,Number.isInteger(limit)?limit:20));

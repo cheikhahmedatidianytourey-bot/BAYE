@@ -193,3 +193,30 @@ test('bounds provider JSON responses without a stream reader', async () => {
   assert.equal(result.providerId, 'fallback');
   assert.equal(result.piece, 'bounded fallback');
 });
+
+
+test('rejects non-HTTPS or credential-bearing provider endpoints before network access', async () => {
+  let calls = 0;
+  for (const endpoint of ['http://provider.example/v1', 'https://user:pass@provider.example/v1']) {
+    await assert.rejects(() => requestAICompletion({
+      primary: { key: 'k', endpoint, model: 'm' },
+      env: {}, messages: [{ role: 'user', content: 'test' }],
+      fetchImpl: async () => { calls++; }
+    }), /HTTPS URL/);
+  }
+  assert.equal(calls, 0);
+});
+
+test('cancels upstream error response bodies before fallback', async () => {
+  let cancelled = false;
+  const result = await requestAICompletion({
+    primary,
+    env: { AI_FALLBACK_API_KEY: 'fallback-secret', AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1', AI_FALLBACK_MODEL: 'fallback-model' },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async url => url.startsWith('https://primary.example')
+      ? { ok: false, status: 503, body: { cancel: async () => { cancelled = true; } } }
+      : { ok: true, body: new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] })).body, headers: new Headers(), status: 200 }
+  });
+  assert.equal(cancelled, true);
+  assert.equal(result.providerId, 'fallback');
+});

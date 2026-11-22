@@ -44,3 +44,11 @@ test('an empty provider image is rejected',async()=>{
 test('image prompts above the model limit are rejected before network access',async()=>{
   await assert.rejects(()=>generateCloudflareImage({prompt:'x'.repeat(2049),env:{CLOUDFLARE_ACCOUNT_ID:'id',CLOUDFLARE_API_TOKEN:'token'},fetchImpl:async()=>{throw new Error('must not call');}}),{code:'MEDIA_INVALID_PROMPT'});
 });
+
+test('oversized image payload is rejected',async()=>{
+  await assert.rejects(()=>generateCloudflareImage({
+    prompt:'test',
+    env:{CLOUDFLARE_ACCOUNT_ID:'id',CLOUDFLARE_API_TOKEN:'token'},
+    fetchImpl:async()=>({ok:true,status:200,json:async()=>({success:true,result:{image:'x'.repeat(10*1024*1024+1)}})})
+  }),{code:'MEDIA_RESULT_TOO_LARGE'});
+});

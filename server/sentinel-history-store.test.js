@@ -51,3 +51,17 @@ test('SENTINEL load filters malformed persisted entries',async()=>{
     assert.equal((await store.load()).length,1);
   } finally { await rm(dir,{recursive:true,force:true}); }
 });
+
+test('SENTINEL save rejects invalid individual entries',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'baye-sentinel-invalid-entry-'));
+  try {
+    const store=new SentinelHistoryStore({filePath:join(dir,'history.json')});
+    await assert.rejects(store.save([{checkedAt:'not-a-date',overallOk:true,results:[]}]),/invalid entry/);
+    await assert.rejects(store.save([{checkedAt:'2026-11-22T10:00:00.000Z',overallOk:true,results:[{name:'bad',ok:'yes'}]}]),/invalid entry/);
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
+test('SENTINEL store validates configured bounds',()=>{
+  assert.throws(()=>new SentinelHistoryStore({maxEntries:0}),/positive safe integer/);
+  assert.throws(()=>new SentinelHistoryStore({maxEntries:1.5}),/positive safe integer/);
+});

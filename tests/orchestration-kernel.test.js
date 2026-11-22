@@ -34,3 +34,27 @@ test('exposes only declared specialist capabilities',()=>{
  assert.ok(roles.some(x=>x.id==='security'&&x.capabilities.includes('inspect_risk')));
  assert.equal(roles.some(x=>x.id==='shell'),false);
 });
+
+test('rejects caller-supplied limits that weaken hard safety ceilings',()=>{
+ const task=[{id:'x',role:'research',objective:'A'}];
+ for(const limits of [
+  {maxTasks:1000},{maxDependenciesPerTask:99},{maxTotalBudget:1000},{maxDepth:99},
+  {maxTasks:0},{maxTasks:1.5},{maxDepth:Infinity},{unknownLimit:3},null,[], 'unsafe'
+ ])assert.throws(()=>buildExecutionGraph(task,limits));
+});
+test('allows stricter valid limits and reports the effective policy',()=>{
+ const graph=buildExecutionGraph([{id:'x',role:'research',objective:'A',budget:2}],{
+  maxTasks:3,maxDependenciesPerTask:2,maxTotalBudget:5,maxDepth:2
+ });
+ assert.deepEqual(graph.limits,{maxTasks:3,maxDependenciesPerTask:2,maxTotalBudget:5,maxDepth:2});
+ assert.throws(()=>buildExecutionGraph([
+  {id:'a',role:'research',objective:'A'},
+  {id:'b',role:'research',objective:'B',dependsOn:['a']}
+ ],{maxDepth:1}),/Profondeur maximale/);
+});
+test('rejects aggregate budget overflow immediately and safely',()=>{
+ assert.throws(()=>buildExecutionGraph([
+  {id:'a',role:'research',objective:'A',budget:Number.MAX_VALUE},
+  {id:'b',role:'research',objective:'B',budget:Number.MAX_VALUE}
+ ]),/Budget total/);
+});

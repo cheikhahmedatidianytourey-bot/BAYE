@@ -19,7 +19,7 @@ test('rejects insecure, local, IP, credential, port and malformed URLs',()=>{
 
 
 test('rejects numeric and hexadecimal host representations',()=>{
-  for(const value of ['https://2130706433/a','https://127.1/a','https://0x7f.0x0.0x0.0x1/a',])assert.equal(validatePublicImageUrl(value),false,value);
+  for(const value of ['https://2130706433/a','https://127.1/a','https://0x7f.0x0.0x0.0x1/a', 'https://0177.0.0.1/a', 'https://0x7f000001/a', 'https://4294967295/a',])assert.equal(validatePublicImageUrl(value),false,value);
 });
 
 test('accepts normalized trailing-dot public hostname',()=>{

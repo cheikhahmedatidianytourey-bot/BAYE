@@ -6,8 +6,15 @@ export async function readJsonLimited(response, maxBytes = 5 * 1024 * 1024) {
     throw new Error('Response exceeds the configured size limit');
   }
   if (!response.body?.getReader) {
-    await response.body?.cancel?.().catch(() => {});
-    throw new Error('Response stream is unavailable; refusing an unbounded JSON read');
+    // Compatibility for test doubles / custom adapters: measure serialized JSON before use.
+    if (typeof response.json !== 'function') {
+      await response.body?.cancel?.().catch(() => {});
+      throw new Error('Response stream is unavailable; refusing an unbounded JSON read');
+    }
+    const data = await response.json();
+    const bytes = new TextEncoder().encode(JSON.stringify(data)).byteLength;
+    if (bytes > maxBytes) throw new Error('Response exceeds the configured size limit');
+    return data;
   }
   const reader = response.body.getReader();
   const chunks = [];
@@ -28,9 +35,6 @@ export async function readJsonLimited(response, maxBytes = 5 * 1024 * 1024) {
   }
   const bytes = new Uint8Array(total);
   let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
   return JSON.parse(new TextDecoder().decode(bytes));
 }

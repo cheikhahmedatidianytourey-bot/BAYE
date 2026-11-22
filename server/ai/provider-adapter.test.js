@@ -179,3 +179,17 @@ test('bounds streamed provider responses even without a content-length header', 
   assert.equal(result.providerId, 'fallback');
   assert.equal(result.piece, 'bounded fallback');
 });
+
+
+test('bounds provider JSON responses without a stream reader', async () => {
+  const result = await requestAICompletion({
+    primary,
+    env: { AI_FALLBACK_API_KEY: 'fallback-secret', AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1', AI_FALLBACK_MODEL: 'fallback-model' },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async (url) => url.startsWith('https://primary.example')
+      ? { ok: true, headers: { get: () => null }, json: async () => ({ oversized: 'x'.repeat(5 * 1024 * 1024 + 1) }) }
+      : { ok: true, headers: { get: () => null }, json: async () => ({ choices: [{ message: { content: 'bounded fallback' } }] }) }
+  });
+  assert.equal(result.providerId, 'fallback');
+  assert.equal(result.piece, 'bounded fallback');
+});

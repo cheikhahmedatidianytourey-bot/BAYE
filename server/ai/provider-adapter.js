@@ -4,7 +4,16 @@ const MAX_PROVIDER_RESPONSE_BYTES = 5 * 1024 * 1024;
 function normalizeEndpoint(value) {
   const raw = String(value || '').trim().replace(/\/$/, '');
   if (!raw) return '';
+  let parsed;
+  try { parsed = new URL(raw); } catch { throw new Error('AI provider endpoint is invalid'); }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || !parsed.hostname) {
+    throw new Error('AI provider endpoint must be a credential-free HTTPS URL');
+  }
   return raw.endsWith('/chat/completions') ? raw : raw + '/chat/completions';
+}
+
+async function discardResponse(response) {
+  try { await response.body?.cancel?.(); } catch {}
 }
 
 export function buildAIProviderChain(primary, env = process.env) {
@@ -66,11 +75,13 @@ export async function requestAICompletion({
         signal: AbortSignal.timeout(timeoutMs)
       });
       if (!response.ok) {
+        await discardResponse(response);
         failures.push({ provider: provider.id, status: response.status });
         continue;
       }
       const declaredLength = Number(response.headers?.get?.('content-length'));
       if (Number.isFinite(declaredLength) && declaredLength > MAX_PROVIDER_RESPONSE_BYTES) {
+        await discardResponse(response);
         failures.push({ provider: provider.id, status: 'response_too_large' });
         continue;
       }

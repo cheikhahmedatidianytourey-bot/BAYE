@@ -165,6 +165,8 @@ app.post('/api/orchestration/run', orchestrationLimiter, async (req,res)=>{
       maxParallel:2,
       maxTokens:1200,
       reviewMode:req.body?.reviewMode==='semantic'?'semantic':'deterministic',
+      priorMemory:req.body?.priorMemory??null,
+      missionId:req.body?.missionId??null,
       complete:(messages,options)=>callAI({key,endpoint,model,messages,max_tokens:options.max_tokens,temperature:options.temperature})
     });
     res.status(result.status==='succeeded'?200:502).json(result);

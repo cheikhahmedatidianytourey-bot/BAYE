@@ -1,3 +1,4 @@
+import { readJsonLimited } from './bounded-json.js';
 const IMAGE_MODEL='@cf/black-forest-labs/flux-1-schnell';
 const MAX_IMAGE_BASE64_LENGTH=10*1024*1024;
 
@@ -16,7 +17,7 @@ export async function generateCloudflareImage({prompt,env=process.env,fetchImpl=
   }
   const url='https://api.cloudflare.com/client/v4/accounts/'+encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)+'/ai/run/'+IMAGE_MODEL;
   const response=await fetchImpl(url,{method:'POST',headers:{Authorization:'Bearer '+env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({prompt,steps:4}),signal:AbortSignal.timeout(90000)});
-  const data=await response.json().catch(()=>null);
+  const data=await readJsonLimited(response).catch(()=>null);
   if(!response.ok||data?.success===false){
     // Keep provider diagnostics useful while never returning credentials or request headers.
     const rawErrors=Array.isArray(data?.errors)?data.errors:[];

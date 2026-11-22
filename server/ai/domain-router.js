@@ -23,7 +23,7 @@ export const BAYE_DOMAINS = Object.freeze([
   { id: 'general', label: 'Connaissances générales', terms: [] }
 ]);
 
-const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const normalize = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
 
 const DOMAIN_METHODS = {
   mathematics: 'MÉTHODE MATHÉMATIQUE : définis les objets et hypothèses; vérifie les domaines et conditions; déroule les calculs sans sauts injustifiés; distingue preuve générale, exemple numérique, conjecture et calcul fini. Ne présente jamais un problème ouvert comme résolu.',
@@ -59,8 +59,8 @@ export function routeBayeDomain(prompt, kind = 'Texte') {
     .sort((a,b) => b.score-a.score || a.domain.localeCompare(b.domain));
   const best = ranked[0] || { domain: 'general', score: 0 };
   const selected = BAYE_DOMAINS.find(item => item.id === best.domain) || BAYE_DOMAINS.at(-1);
-  // Secondary domains are included only when their score is meaningful relative to the top match.
-  const secondary = ranked.slice(1).filter(item => item.score >= 1 && item.score >= best.score * 0.35);
+  // Secondary matches use a lower threshold so genuinely relevant disciplines are not omitted.
+  const secondary = ranked.slice(1).filter(item => item.score >= 1 && item.score >= best.score * 0.15);
   const disciplines = [best, ...secondary].map(item => {
     const domain = BAYE_DOMAINS.find(d => d.id === item.domain);
     return { id: item.domain, label: domain.label, score: item.score };
@@ -85,7 +85,7 @@ export function buildDomainSystemPrompt(kind, prompt) {
       route.disciplines.map(item => DOMAIN_METHODS[item.id]),
       'Si la demande traverse plusieurs domaines, signale les disciplines mobilisées et traite leurs interactions au lieu de forcer une seule spécialité.',
       'Ne confonds jamais expertise de rédaction avec preuve scientifique, validation réglementaire, diagnostic médical ou certification professionnelle.'
-    ].join('\n')
+    ].join('\\n')
   };
 }
 

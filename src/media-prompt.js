@@ -6,7 +6,7 @@ const DIRECTIONS = {
   cinematic: 'Camera style: cinematic live-action photography, controlled camera movement and realistic depth of field.'
 };
 export function buildVideoPrompt({prompt,humanFocus=true,characterConsistency=true,videoLook='live-action'}={}) {
-  const subject = typeof prompt === 'string' ? prompt.trim() : '';
+  const subject = typeof prompt === 'string' ? prompt.trim().slice(0,1200) : '';
   if (!subject) return '';
   return [subject,DIRECTIONS.realism,humanFocus?DIRECTIONS.humans:'',characterConsistency?DIRECTIONS.continuity:'',videoLook==='documentary'?DIRECTIONS.documentary:DIRECTIONS.cinematic].filter(Boolean).join('\n\n');
 }

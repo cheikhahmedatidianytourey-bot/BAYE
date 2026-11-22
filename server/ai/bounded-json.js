@@ -6,10 +6,8 @@ export async function readJsonLimited(response, maxBytes = 5 * 1024 * 1024) {
     throw new Error('Response exceeds the configured size limit');
   }
   if (!response.body?.getReader) {
-    const data = await response.json();
-    const encoded = new TextEncoder().encode(JSON.stringify(data));
-    if (encoded.byteLength > maxBytes) throw new Error('Response exceeds the configured size limit');
-    return data;
+    await response.body?.cancel?.().catch(() => {});
+    throw new Error('Response stream is unavailable; refusing an unbounded JSON read');
   }
   const reader = response.body.getReader();
   const chunks = [];

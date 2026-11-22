@@ -15,6 +15,7 @@ const historyStore = new SentinelHistoryStore({maxEntries:MAX_HISTORY});
 let historyRestorePromise = null;
 let intervalHandle = null;
 let lastOverallOk = null;
+let activeMonitorPromise = null;
 
 async function restoreHistory() {
   if (!historyRestorePromise) {
@@ -41,7 +42,7 @@ async function checkEndpoint(url, timeoutMs = DEFAULT_TIMEOUT_MS) {
     return {ok:false,status:null,latencyMs:Date.now()-started,error:error?.name==='AbortError'?'Timeout':'Endpoint unreachable'};
   } finally { clearTimeout(timeout); }
 }
-async function runMonitor(){
+async function performMonitor(){
   await restoreHistory();
   const endpoints=[
     {name:'backend-health',url:process.env.BAYE_BACKEND_HEALTH_URL||'https://baye-ai-gateway.onrender.com/health'},
@@ -60,6 +61,12 @@ async function runMonitor(){
   } else if(!report.overallOk) console.warn('[BAYE SENTINEL] incident check',JSON.stringify(report.diagnostics));
   return report;
 }
+function runMonitor(){
+  if(activeMonitorPromise)return activeMonitorPromise;
+  activeMonitorPromise=performMonitor().finally(()=>{activeMonitorPromise=null;});
+  return activeMonitorPromise;
+}
+
 function startPeriodicMonitor(){
   if(intervalHandle)return {started:false,intervalMs:configuredInterval(),reason:'already_running'};
   if(process.env.BAYE_SENTINEL_AUTORUN==='false')return {started:false,reason:'disabled_by_environment'};

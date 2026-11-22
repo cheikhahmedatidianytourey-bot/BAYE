@@ -5,7 +5,7 @@ import { checkEndpoint, runMonitor } from '../server/baye-monitor.js';
 import { createServer } from 'node:http';
 
 test('core info exposes expected name and version',()=>{
-  const info=getCoreInfo();assert.equal(info.name,'BAYE AI CORE');assert.equal(info.version,'2.0.0');
+  const info=getCoreInfo();assert.equal(info.name,'BAYE AI CORE');assert.equal(info.version,'2.1.0');
 });
 test('core prompt routes Code tasks to coding guidance',()=>{
   const prompt=buildBayeCorePrompt('Code');assert.match(prompt,/maintainable, complete code/i);assert.match(prompt,/security risks/i);

@@ -38,15 +38,19 @@ app.get('/api/independent-core/status',(_req,res)=>res.json(getIndependentCoreSt
 app.post('/api/independent-core/runtime',generationLimiter,(req,res)=>{try{res.json(runOwnedRuntime(req.body?.input));}catch(err){res.status(400).json({error:err.message||'Entrée invalide.'});}});
 app.post('/api/independent-core/plan',generationLimiter,(req,res)=>{try{const mission=req.body?.mission;if(typeof mission!=='string'||mission.trim().length===0)return res.status(400).json({error:'Mission requise.'});if(mission.length>4000)return res.status(400).json({error:'Mission trop longue (maximum 4 000 caractères).'});res.json(buildMissionPlan(mission));}catch(_err){res.status(400).json({error:'Mission invalide.'});}})
 
+function secureBearerMatch(req,secret){
+  if(typeof secret!=='string'||secret.length<32)return false;
+  const supplied=req.get('authorization')||'';
+  const expected='Bearer '+secret;
+  return supplied.length===expected.length&&crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected));
+}
+
 // BAYE Memory Engine: all write/search access is protected by a separately configured token.
 const memoryEngine=new MemoryEngine();
 app.use('/api/memory', (req,res,next)=>{
   const token=process.env.BAYE_MEMORY_TOKEN;
   if(typeof token!=='string'||token.length<32)return res.status(503).json({error:'Memory access token is not securely configured.'});
-  const supplied=req.get('authorization')||'';
-  const expected='Bearer '+token;
-  const safeEqual=supplied.length===expected.length&&crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected));
-  if(!safeEqual)return res.status(401).json({error:'Unauthorized'});
+  if(!secureBearerMatch(req,token))return res.status(401).json({error:'Unauthorized'});
   next();
 });
 app.get('/api/memory/status',async(req,res)=>{try{res.json(await memoryEngine.status());}catch(_){res.status(500).json({error:'Memory status unavailable.'});}});
@@ -61,8 +65,8 @@ app.get('/api/capabilities', (_req,res)=>res.json({ ...getBayeCapabilityCatalog(
 // BAYE autonomous monitoring: restricted endpoint; secret must be configured in Render.
 app.get('/api/sentinel/status', (req,res)=>{
   const secret=process.env.BAYE_MONITOR_SECRET;
-  if(!secret)return res.status(503).json({error:'Monitoring access secret not configured'});
-  if(req.get('authorization') !== 'Bearer '+secret)return res.status(401).json({error:'Unauthorized'});
+  if(typeof secret!=='string'||secret.length<32)return res.status(503).json({error:'Monitoring access secret is not securely configured'});
+  if(!secureBearerMatch(req,secret))return res.status(401).json({error:'Unauthorized'});
   res.json(getMonitorStatus());
 });
 app.get('/api/sentinel/history', (req,res)=>{
@@ -73,8 +77,8 @@ app.get('/api/sentinel/history', (req,res)=>{
 });
 app.get('/api/monitor/check', async (req,res)=>{
   const secret=process.env.BAYE_MONITOR_SECRET;
-  if(!secret) return res.status(503).json({error:'Monitoring access secret not configured'});
-  if(req.get('authorization') !== 'Bearer '+secret) return res.status(401).json({error:'Unauthorized'});
+  if(typeof secret!=='string'||secret.length<32)return res.status(503).json({error:'Monitoring access secret is not securely configured'});
+  if(!secureBearerMatch(req,secret))return res.status(401).json({error:'Unauthorized'});
   try { res.json(await runMonitor()); }
   catch(_err){ res.status(500).json({error:'Monitoring check failed'}); }
 });

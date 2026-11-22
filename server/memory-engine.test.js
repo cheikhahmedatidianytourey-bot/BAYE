@@ -9,7 +9,7 @@ test('parallel additions are serialized and retained',async()=>{
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'baye-memory-'));
   try{
     const engine=new MemoryEngine({filePath:path.join(dir,'memory.json'),maxEntries:100});
-    const results=await Promise.all(Array.from({length:40},(_,i)=>engine.add({text:'entry '+i,tags:['test']}));
+    const results=await Promise.all(Array.from({length:40},(_,i)=>engine.add({text:'entry '+i,tags:['test']})));
     const stored=await engine.readAll();
     assert.equal(results.length,40);assert.equal(stored.length,40);
     assert.equal(new Set(stored.map(x=>x.id)).size,40);
@@ -40,7 +40,7 @@ test('bounds and rejects invalid memory inputs',async()=>{
     await assert.rejects(()=>engine.add({text:''}));
     await assert.rejects(()=>engine.add({text:'ok',tags:Array(21).fill('tag')}));
     await assert.rejects(()=>engine.add({text:'ok',tags:[null]}));
-    await assert.rejects(()=>engine.add({text:'ok',tags:[' '.repeat(60)}));
+    await assert.rejects(()=>engine.add({text:'ok',tags:[' '.repeat(60)]}));
     const item=await engine.add({text:' dedup ',tags:[' a ','a','',' b ']});
     assert.equal(item.text,'dedup');assert.deepEqual(item.tags,['a','b']);
   }finally{await fs.rm(dir,{recursive:true,force:true});}

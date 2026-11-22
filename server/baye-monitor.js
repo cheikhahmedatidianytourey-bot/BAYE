@@ -31,6 +31,7 @@ async function runMonitor(){
   const report={checkedAt:new Date().toISOString(),overallOk:results.every(r=>r.ok),results,
     diagnostics:results.filter(r=>!r.ok).map(r=>({target:r.name,issue:r.error||'HTTP failure',recommendation:'Inspect service logs, recent deploys, and endpoint configuration.'}))};
   history.unshift(report);if(history.length>MAX_HISTORY)history.length=MAX_HISTORY;
+  console.log('[BAYE SENTINEL] cycle',JSON.stringify({checkedAt:report.checkedAt,overallOk:report.overallOk,results:report.results.map(r=>({name:r.name,ok:r.ok,status:r.status,latencyMs:r.latencyMs,error:r.error}))}));
   if(lastOverallOk!==report.overallOk){
     console.log('[BAYE SENTINEL] state transition:',lastOverallOk===null?'initial':lastOverallOk?'healthy -> attention':'attention -> healthy',JSON.stringify({checkedAt:report.checkedAt,overallOk:report.overallOk,diagnostics:report.diagnostics}));
     lastOverallOk=report.overallOk;

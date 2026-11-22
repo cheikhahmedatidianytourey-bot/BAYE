@@ -13,7 +13,7 @@ const modules=[
  {id:'planner',name:'Deterministic Planner',state:'active'},
  {id:'verification',name:'Verification Layer',state:'scaffold'},
  {id:'memory',name:'Memory Layer',state:'not_implemented'},
- {id:'model_runtime',name:'Owned Model Runtime',state:'not_implemented'},
+ {id:'model_runtime',name:'Owned Runtime',state:'foundation'},
  {id:'tool_execution',name:'Tool Execution',state:'not_implemented'}
 ];
 export function classifyMission(text){
@@ -34,5 +34,5 @@ export function buildMissionPlan(text){
  return {core:'BAYE Independent Intelligence Core',version:'0.2.0',mode:'provider-free planning',domain,mission,modules:['mission_router','planner','verification'],steps,executionAvailable:false,verificationRequired:true,disclaimer:'Le noyau planifie et route de façon déterministe. Il ne constitue pas encore un modèle génératif autonome et ne réalise pas les étapes externes.'};
 }
 export function getIndependentCoreStatus(){
- return {name:'BAYE Independent Intelligence Core',version:'0.2.0',status:'foundation',providerIndependent:true,trainedFoundationModel:false,executionEnabled:false,capabilities:['mission routing','deterministic task planning','module status','verification planning'],modules,nextMilestones:['owned model runtime','verified tool execution with approvals','consented persistent memory','benchmark and improvement pipeline']};
+ return {name:'BAYE Independent Intelligence Core',version:'0.2.0',status:'foundation',providerIndependent:true,trainedFoundationModel:false,executionEnabled:false,capabilities:['mission routing','deterministic task planning','module status','verification planning'],modules,nextMilestones:['trained neural model (dataset, training and evaluation required)','verified tool execution with approvals','consented persistent memory','benchmark and improvement pipeline']};
 }

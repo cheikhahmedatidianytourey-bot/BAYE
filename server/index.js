@@ -172,7 +172,7 @@ app.post('/api/orchestration/run', orchestrationLimiter, async (req,res)=>{
     res.status(result.status==='succeeded'?200:502).json(result);
   }catch(err){
     const message=err?.message||'Mission invalide.';
-    const clientError=/tâche|graphe|budget|dépendance|rôle|objectif|limite|configuration|profondeur/i.test(message);
+    const clientError=/tâche|graphe|budget|dépendance|rôle|objectif|limite|configuration|profondeur|mission|mémoire/i.test(message);
     res.status(clientError?400:502).json({error:clientError?message:'BAYE n’a pas pu terminer la mission multi-agents.'});
   }
 });

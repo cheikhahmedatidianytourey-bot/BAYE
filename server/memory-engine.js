@@ -17,7 +17,7 @@ export class MemoryEngine {
       if(stat.size>MAX_MEMORY_FILE_BYTES)throw new Error('Memory file exceeds the configured size limit.');
       const data=JSON.parse(await fs.readFile(this.filePath,'utf8'));
       if(!Array.isArray(data))throw new Error('Memory file format is invalid.');
-      return data.filter(e=>e&&typeof e==='object'&&!Array.isArray(e)&&typeof e.id==='string'&&typeof e.text==='string'&&Array.isArray(e.tags)&&e.tags.every(t=>typeof t==='string'));
+      return data.filter(e=>e&&typeof e==='object'&&!Array.isArray(e)&&Object.keys(e).every(key=>['id','text','tags','createdAt'].includes(key))&&typeof e.id==='string'&&e.id.length>0&&e.id.length<=200&&typeof e.text==='string'&&e.text.trim().length>0&&e.text.length<=4000&&Array.isArray(e.tags)&&e.tags.length<=20&&e.tags.every(t=>typeof t==='string'&&t.length<=50)&&(e.createdAt===undefined||(typeof e.createdAt==='string'&&Number.isFinite(Date.parse(e.createdAt))))).slice(0,this.maxEntries);
     }catch(err){if(err.code==='ENOENT')return [];throw err;}
   }
   async writeAll(entries){

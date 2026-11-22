@@ -28,7 +28,7 @@ const escapeRegex = value => [...value].map(char => '.*+?^${}()|[]\\'.includes(c
 const matchesTerm = (text, term) => {
   const normalizedTerm = normalize(term).trim();
   if (!normalizedTerm) return false;
-  return new RegExp('(^|[^a-z0-9])' + escapeRegex(normalizedTerm) + '([^a-z0-9]|$)').test(text);
+  return new RegExp('(^|[^a-z0-9])' + escapeRegex(normalizedTerm) + '(s?)([^a-z0-9]|$)').test(text);
 };
 
 const DOMAIN_METHODS = {

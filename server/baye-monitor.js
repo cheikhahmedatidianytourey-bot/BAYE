@@ -41,7 +41,7 @@ function startPeriodicMonitor(){
   if(intervalHandle)return {started:false,intervalMs:configuredInterval(),reason:'already_running'};
   if(process.env.BAYE_SENTINEL_AUTORUN==='false')return {started:false,reason:'disabled_by_environment'};
   const intervalMs=configuredInterval();
-  intervalHandle=setInterval(()=>{runMonitor().catch(err=>console.error('[BAYE SENTINEL] check error',err?.message||err);)},intervalMs);
+  intervalHandle=setInterval(()=>{runMonitor().catch(err=>console.error('[BAYE SENTINEL] check error',err?.message||err));},intervalMs);
   if(typeof intervalHandle.unref==='function')intervalHandle.unref();
   console.log('[BAYE SENTINEL] periodic checks enabled',intervalMs);
   runMonitor().catch(err=>console.error('[BAYE SENTINEL] initial check error',err?.message||err));

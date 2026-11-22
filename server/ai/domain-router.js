@@ -53,7 +53,7 @@ export function routeBayeDomain(prompt, kind = 'Texte') {
   const ranked = BAYE_DOMAINS.filter(domain => domain.id !== 'general')
     .map(domain => ({
       domain: domain.id,
-      score: domain.terms.reduce((sum, term) => sum + (text.includes(normalize(term)) ? Math.max(1, normalize(term).split(' ').length) : 0), 0)
+      score: domain.terms.reduce((sum, term) => sum + (text.includes(normalize(term)) ? (['python', 'javascript', 'typescript', 'api', 'programmation', 'programmer', 'code', 'algorithme', 'logiciel', 'base de donnees'].includes(normalize(term)) ? 3 : Math.max(1, normalize(term).split(' ').length)) : 0), 0)
     }))
     .filter(item => item.score > 0)
     .sort((a,b) => b.score-a.score || a.domain.localeCompare(b.domain));

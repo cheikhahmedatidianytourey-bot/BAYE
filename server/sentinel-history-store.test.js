@@ -85,3 +85,31 @@ test('SENTINEL rejects unexpected persisted fields',async()=>{
     await assert.rejects(store.save([{checkedAt:'2026-11-22T10:00:00.000Z',overallOk:true,results:[{name:'backend',ok:true,extra:'unexpected'}]}]),/invalid entry/);
   }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+test('SENTINEL history persists monitor diagnostics and bounded result metadata',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'baye-sentinel-diagnostics-'));
+  const filePath=join(dir,'history.json');
+  try{
+    const store=new SentinelHistoryStore({filePath,maxEntries:3});
+    const report={
+      checkedAt:'2026-11-22T10:00:00.000Z',
+      overallOk:false,
+      results:[{name:'backend-health',ok:false,status:503,latencyMs:125,error:'Non-success HTTP response'}],
+      diagnostics:[{target:'backend-health',issue:'Non-success HTTP response',recommendation:'Inspect service logs and endpoint configuration.'}]
+    };
+    await store.save([report]);
+    const restarted=new SentinelHistoryStore({filePath,maxEntries:3});
+    assert.deepEqual(await restarted.load(),[report]);
+  }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('SENTINEL rejects malformed or unexpected diagnostic fields',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'baye-sentinel-bad-diagnostics-'));
+  try{
+    const store=new SentinelHistoryStore({filePath:join(dir,'history.json')});
+    const base={checkedAt:'2026-11-22T10:00:00.000Z',overallOk:false,results:[]};
+    await assert.rejects(store.save([{...base,diagnostics:[{target:'backend',issue:'down',recommendation:'check',secret:'unexpected'}]}]),/invalid entry/);
+    await assert.rejects(store.save([{...base,diagnostics:[{target:'backend',issue:'down',recommendation:7}]}]),/invalid entry/);
+    await assert.rejects(store.save([{...base,results:[{name:'backend',ok:false,latencyMs:-1}]}]),/invalid entry/);
+  }finally{await rm(dir,{recursive:true,force:true});}
+});

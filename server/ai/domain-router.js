@@ -82,7 +82,7 @@ export function buildDomainSystemPrompt(kind, prompt) {
     systemPrompt: [
       buildBayeCorePrompt(kind),
       'BAYE DOMAIN ROUTER: domaine sélectionné = ' + route.label + '.',
-      DOMAIN_METHODS[route.domain],
+      route.disciplines.map(item => DOMAIN_METHODS[item.id]),
       'Si la demande traverse plusieurs domaines, signale les disciplines mobilisées et traite leurs interactions au lieu de forcer une seule spécialité.',
       'Ne confonds jamais expertise de rédaction avec preuve scientifique, validation réglementaire, diagnostic médical ou certification professionnelle.'
     ].join('\n')

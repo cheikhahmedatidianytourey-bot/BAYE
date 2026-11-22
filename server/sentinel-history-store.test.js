@@ -21,8 +21,15 @@ test('SENTINEL history is bounded to configured maximum',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'baye-sentinel-limit-'));
   try {
     const store=new SentinelHistoryStore({filePath:join(dir,'history.json'),maxEntries:2});
-    await store.save([{id:1},{id:2},{id:3}]);
-    assert.deepEqual(await store.load(),[{id:1},{id:2}]);
+    await store.save([
+      {checkedAt:'2026-11-22T10:00:00.000Z',overallOk:true,results:[{name:'backend',ok:true}]},
+      {checkedAt:'2026-11-22T09:55:00.000Z',overallOk:false,results:[{name:'backend',ok:false}]},
+      {checkedAt:'2026-11-22T09:50:00.000Z',overallOk:true,results:[{name:'backend',ok:true}]}
+    ]);
+    assert.deepEqual(await store.load(),[
+      {checkedAt:'2026-11-22T10:00:00.000Z',overallOk:true,results:[{name:'backend',ok:true}]},
+      {checkedAt:'2026-11-22T09:55:00.000Z',overallOk:false,results:[{name:'backend',ok:false}]}
+    ]);
   } finally { await rm(dir,{recursive:true,force:true}); }
 });
 
@@ -31,5 +38,16 @@ test('SENTINEL store rejects malformed history values',async()=>{
   try {
     const store=new SentinelHistoryStore({filePath:join(dir,'history.json')});
     await assert.rejects(store.save({not:'an array'}),/must be an array/);
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
+test('SENTINEL load filters malformed persisted entries',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'baye-sentinel-filter-'));
+  const filePath=join(dir,'history.json');
+  try {
+    const {writeFile}=await import('node:fs/promises');
+    await writeFile(filePath,JSON.stringify([{id:'bad'},{checkedAt:'2026-11-22T10:00:00.000Z',overallOk:true,results:[{name:'backend',ok:true}]}]));
+    const store=new SentinelHistoryStore({filePath});
+    assert.equal((await store.load()).length,1);
   } finally { await rm(dir,{recursive:true,force:true}); }
 });

@@ -8,13 +8,29 @@ const ROLE_CAPABILITIES = Object.freeze({
   quality: ['inspect_artifact','prepare_test_plan'],
   security: ['inspect_risk','prepare_security_review']
 });
-const DEFAULT_LIMITS = Object.freeze({maxTasks:12,maxDependenciesPerTask:6,maxTotalBudget:100,maxDepth:8});
+const HARD_LIMITS = Object.freeze({maxTasks:12,maxDependenciesPerTask:6,maxTotalBudget:100,maxDepth:8});
+const DEFAULT_LIMITS = HARD_LIMITS;
 function fail(message){throw new Error(message);}
+function resolveLimits(input){
+ if(input===null||typeof input!=='object'||Array.isArray(input))fail('Configuration des limites invalide.');
+ const policy={...DEFAULT_LIMITS};
+ for(const key of Object.keys(HARD_LIMITS)){
+  if(!Object.hasOwn(input,key))continue;
+  const value=input[key];
+  const valid=key==='maxTotalBudget'
+   ? Number.isFinite(value)&&value>0&&value<=HARD_LIMITS[key]
+   : Number.isSafeInteger(value)&&value>0&&value<=HARD_LIMITS[key];
+  if(!valid)fail('Limite invalide ou supérieure au plafond de sécurité: '+key+'.');
+  policy[key]=value;
+ }
+ for(const key of Object.keys(input))if(!Object.hasOwn(HARD_LIMITS,key))fail('Paramètre de limite inconnu: '+key+'.');
+ return Object.freeze(policy);
+}
 export function getOrchestrationRoles(){
  return Object.entries(ROLE_CAPABILITIES).map(([id,capabilities])=>({id,capabilities:[...capabilities]}));
 }
 export function buildExecutionGraph(tasks,limits={}){
- const policy={...DEFAULT_LIMITS,...limits};
+ const policy=resolveLimits(limits);
  if(!Array.isArray(tasks)||tasks.length<1||tasks.length>policy.maxTasks)fail('Le graphe doit contenir de 1 à '+policy.maxTasks+' tâches.');
  const byId=new Map();
  let totalBudget=0;
@@ -30,9 +46,9 @@ export function buildExecutionGraph(tasks,limits={}){
   const budget=task.budget??1;
   if(!Number.isFinite(budget)||budget<=0)fail('Budget invalide pour '+task.id+'.');
   totalBudget+=budget;
+  if(!Number.isFinite(totalBudget)||totalBudget>policy.maxTotalBudget)fail('Budget total du graphe dépassé.');
   byId.set(task.id,{id:task.id,role:task.role,objective:task.objective.trim(),dependsOn:[...dependsOn],budget,capabilities:[...ROLE_CAPABILITIES[task.role]]});
  }
- if(totalBudget>policy.maxTotalBudget)fail('Budget total du graphe dépassé.');
  for(const task of byId.values())for(const dep of task.dependsOn)if(!byId.has(dep))fail('Dépendance inconnue '+dep+' pour '+task.id+'.');
  const indegree=new Map([...byId.keys()].map(id=>[id,byId.get(id).dependsOn.length]));
  const dependents=new Map([...byId.keys()].map(id=>[id,[]]));

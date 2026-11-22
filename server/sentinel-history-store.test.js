@@ -61,6 +61,11 @@ test('SENTINEL save rejects invalid individual entries',async()=>{
   } finally { await rm(dir,{recursive:true,force:true}); }
 });
 
+test('SENTINEL default history path uses the writable OS temporary directory',()=>{
+  const store=new SentinelHistoryStore();
+  assert.equal(store.filePath,process.env.BAYE_SENTINEL_HISTORY_FILE||join(tmpdir(),'baye-sentinel-history.json'));
+});
+
 test('SENTINEL store validates configured bounds',()=>{
   assert.throws(()=>new SentinelHistoryStore({maxEntries:0}),/positive safe integer/);
   assert.throws(()=>new SentinelHistoryStore({maxEntries:1.5}),/positive safe integer/);

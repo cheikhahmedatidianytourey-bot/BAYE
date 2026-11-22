@@ -56,3 +56,14 @@ test('constructor rejects unsafe bounds and malformed files are filtered',async(
     assert.deepEqual(await engine.search('safe'),[{id:'1',text:'safe',tags:[]}]);
   }finally{await fs.rm(dir,{recursive:true,force:true});}
 });
+
+
+test('memory refuses oversized persisted files before parsing',async()=>{
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'baye-memory-large-'));
+  try{
+    const file=path.join(dir,'memory.json');
+    await fs.writeFile(file,' '.repeat(8*1024*1024+1));
+    const engine=new MemoryEngine({filePath:file});
+    await assert.rejects(engine.readAll(),/size limit/);
+  }finally{await fs.rm(dir,{recursive:true,force:true});}
+});

@@ -57,5 +57,5 @@ export class MemoryEngine {
     });
   }
   async clear(){return this._serializeMutation(()=>this.writeAll([]));}
-  async status(){return {name:'BAYE Memory Engine',version:'0.3.0',storage:'JSON file',entries:(await this.readAll()).length,maxEntries:this.maxEntries,persistenceNote:'Durability across redeploys requires a Render persistent disk mounted at this path.',enabled:true};}
+  async status(){return {name:'BAYE Memory Engine',version:'0.3.0',storage:'JSON file',entries:(await this.readAll()).length,maxEntries:this.maxEntries,persistenceNote:'Durability across redeploys requires a persistent disk mounted at this path.',concurrencyScope:'single-process only',multiInstanceSafe:false,enabled:true};}
 }

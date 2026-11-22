@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {SentinelHistoryStore} from './sentinel-history-store.js';
+
+test('SENTINEL history survives store reconstruction',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'baye-sentinel-history-'));
+  const filePath=join(dir,'history.json');
+  try {
+    const first=new SentinelHistoryStore({filePath,maxEntries:3});
+    const entries=[{checkedAt:'2026-11-22T10:00:00.000Z',overallOk:true},{checkedAt:'2026-11-22T09:55:00.000Z',overallOk:false}];
+    await first.save(entries);
+    const restarted=new SentinelHistoryStore({filePath,maxEntries:3});
+    assert.deepEqual(await restarted.load(),entries);
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
+test('SENTINEL history is bounded to configured maximum',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'baye-sentinel-limit-'));
+  try {
+    const store=new SentinelHistoryStore({filePath:join(dir,'history.json'),maxEntries:2});
+    await store.save([{id:1},{id:2},{id:3}]);
+    assert.deepEqual(await store.load(),[{id:1},{id:2}]);
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
+test('SENTINEL store rejects malformed history values',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'baye-sentinel-invalid-'));
+  try {
+    const store=new SentinelHistoryStore({filePath:join(dir,'history.json')});
+    await assert.rejects(store.save({not:'an array'}),/must be an array/);
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});

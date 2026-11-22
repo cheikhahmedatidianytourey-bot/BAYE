@@ -45,7 +45,7 @@ const AUTONOMY_RULES = [
 ];
 
 const TASK_RULES = {
-  'Code': 'Produce maintainable, complete code; explain setup, identify dependencies, include tests and verification steps, and flag security, performance and operational risks.',
+  'Code': 'Produce maintainable, complete code; explain setup, identify dependencies, include tests and verification steps, and flag security risks, performance and operational risks.',
   'Plan': 'Set measurable objectives, milestones, dependencies, resources, risks, realistic timelines, success criteria and the next action.',
   'Message': 'Create a natural, audience-appropriate message ready to send; match the requested tone and language.',
   'Idée de projet': 'Assess the problem, target users, novelty, feasibility, minimum viable product, resources, economics, risks and staged development.',

@@ -43,3 +43,18 @@ export function requireBayeIdentity(req,res,next){
  try{req.bayeIdentity=verifyBayeIdentityToken(authorization.slice(7),{secret,issuer,audience});next();}
  catch(_error){return unauthorized(res);}
 }
+
+ 
+// Optional identity for backward-compatible anonymous orchestration.
+// If a caller presents a bearer token, it must be valid; invalid credentials never downgrade to anonymous.
+export function optionalBayeIdentity(req,res,next){
+ const authorization=req.get('authorization')||'';
+ if(!authorization)return next();
+ const secret=process.env.BAYE_IDENTITY_SECRET;
+ const issuer=process.env.BAYE_IDENTITY_ISSUER;
+ const audience=process.env.BAYE_IDENTITY_AUDIENCE;
+ if(typeof secret!=='string'||Buffer.byteLength(secret)<32||!issuer||!audience)return res.status(503).json({error:'Authentification utilisateur non configurée.'});
+ if(!authorization.startsWith('Bearer ')||authorization.length<=7)return unauthorized(res);
+ try{req.bayeIdentity=verifyBayeIdentityToken(authorization.slice(7),{secret,issuer,audience});next();}
+ catch(_error){return unauthorized(res);}
+}

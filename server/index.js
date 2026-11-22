@@ -17,6 +17,7 @@ import { verifyTextOutput } from './verification-layer.js';
 import { validatePublicImageUrl } from './ai/image-url-validation.js';
 import { readJsonLimited } from './ai/bounded-json.js';
 import { buildOperationalAudit } from './operational-audit.js';
+import { buildStudioInstruction } from './studio-engine.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -159,7 +160,7 @@ app.post('/api/generate', generationLimiter, async (req,res)=>{
     const model=process.env.AI_MODEL||'gpt-4o-mini';
     let output='',finishReason='stop',actualModel=model,providerId='primary';
     const routed = buildDomainSystemPrompt(kind, prompt);
-    const messages=[{role:'system',content:routed.systemPrompt},{role:'user',content:prompt}];
+    const messages=[{role:'system',content:routed.systemPrompt+'\\n\\n'+buildStudioInstruction({kind,prompt,context:{configuredAIProvider:Boolean(process.env.AI_API_KEY),configuredMediaProviders:{image:Boolean(process.env.CLOUDFLARE_ACCOUNT_ID&&process.env.CLOUDFLARE_API_TOKEN),video:Boolean(process.env.FAL_KEY)}}})},{role:'user',content:prompt}];
     for(let part=0;part<3;part++){
       const response=await callAI({key,endpoint,model,messages,max_tokens:8192,temperature:0.7});
       output+=response.piece;finishReason=response.finishReason;actualModel=response.model||actualModel;providerId=response.providerId||providerId;

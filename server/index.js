@@ -18,6 +18,7 @@ import { validatePublicImageUrl } from './ai/image-url-validation.js';
 import { readJsonLimited } from './ai/bounded-json.js';
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
+import { runBayeOrchestration } from './orchestration-service.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -38,6 +39,7 @@ app.use('/api/', rateLimit({windowMs:60_000, max:30, standardHeaders:true, legac
 const generationLimiter=rateLimit({windowMs:60_000,max:8,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes de génération. Réessaie dans une minute.'}});
 const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes média. Réessaie dans une minute.'}});
 const mediaStatusLimiter=rateLimit({windowMs:60_000,max:30,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de vérifications média. Réessaie dans une minute.'}});
+const orchestrationLimiter=rateLimit({windowMs:60_000,max:2,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de missions multi-agents. Réessaie dans une minute.'}});
 app.get('/', (_req,res)=>res.type('text').send('BAYE AI CORE — Gateway online. Use /health for system status.'));
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo(),independentCore:getIndependentCoreStatus()}));
 app.get('/api/operational-audit',(req,res)=>{const secret=process.env.BAYE_MONITOR_SECRET;if(typeof secret!=='string'||secret.length<32)return res.status(503).json({error:'Audit access secret is not securely configured'});if(!secureBearerMatch(req,secret))return res.status(401).json({error:'Unauthorized'});res.json(buildOperationalAudit());});
@@ -148,6 +150,30 @@ async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0
     temperature
   });
 }
+
+// BAYE Specialist Orchestration v1: bounded text-only calls to isolated specialist prompts.
+app.post('/api/orchestration/run', orchestrationLimiter, async (req,res)=>{
+  try{
+    const tasks=req.body?.tasks;
+    if(!Array.isArray(tasks)||tasks.length<1||tasks.length>5)return res.status(400).json({error:'Fournis de 1 à 5 tâches spécialistes.'});
+    const key=process.env.AI_API_KEY;
+    if(!key)return res.status(503).json({error:'Le fournisseur IA principal n’est pas configuré.'});
+    const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
+    const model=process.env.AI_MODEL||'gpt-4o-mini';
+    const result=await runBayeOrchestration({
+      tasks,
+      maxParallel:2,
+      maxTokens:1200,
+      complete:(messages,options)=>callAI({key,endpoint,model,messages,max_tokens:options.max_tokens,temperature:options.temperature})
+    });
+    res.status(result.status==='succeeded'?200:502).json(result);
+  }catch(err){
+    const message=err?.message||'Mission invalide.';
+    const clientError=/tâche|graphe|budget|dépendance|rôle|objectif|limite|configuration|profondeur/i.test(message);
+    res.status(clientError?400:502).json({error:clientError?message:'BAYE n’a pas pu terminer la mission multi-agents.'});
+  }
+});
+
 app.post('/api/generate', generationLimiter, async (req,res)=>{
   try {
     const {prompt,kind='Texte'}=req.body||{};

@@ -49,7 +49,15 @@ test('rejects invalid graphs, missing executors and unsafe parallelism',async()=
  await assert.rejects(()=>runSpecialistTasks(graph([task('a')]),{execute:async()=>({}),maxParallel:4}),/maximum 3/);
  await assert.rejects(()=>runSpecialistTasks(graph([task('a')]),{}),/Exécuteur/);
 });
-test('rejects malformed or oversized worker outputs',async()=>{
- await assert.rejects(()=>runSpecialistTasks(graph([task('a')]),{execute:async()=> 'text'}),/objet résultat/);
- await assert.rejects(()=>runSpecialistTasks(graph([task('a')]),{execute:async()=>({payload:'x'.repeat(50001)})}),/trop volumineux/);
+test('marks malformed or oversized worker outputs failed and does not expose them',async()=>{
+ const malformed=await runSpecialistTasks(graph([task('bad')]),{execute:async()=> 'text'});
+ assert.equal(malformed.status,'failed');
+ assert.equal(malformed.taskStates.bad.status,'failed');
+ assert.equal(malformed.results[0].status,'failed');
+ assert.equal(Object.hasOwn(malformed.results[0],'output'),false);
+ const oversized=await runSpecialistTasks(graph([task('large')]),{execute:async()=>({payload:'x'.repeat(50001)})});
+ assert.equal(oversized.status,'failed');
+ assert.equal(oversized.taskStates.large.status,'failed');
+ assert.equal(oversized.results[0].status,'failed');
+ assert.equal(Object.hasOwn(oversized.results[0],'output'),false);
 });

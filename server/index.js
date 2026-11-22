@@ -5,7 +5,7 @@ import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
 import { buildMissionPlan, getIndependentCoreStatus } from './independent-core.js';
 import { runOwnedRuntime } from './owned-runtime.js';
 import { MemoryEngine } from './memory-engine.js';
-import { runMonitor, getMonitorStatus, getMonitorHistory } from './baye-monitor.js';
+import { runMonitor, startPeriodicMonitor, getMonitorStatus, getMonitorHistory } from './baye-monitor.js';
 import { createAcademyRouter } from './academy/router.js';
 import { buildDomainSystemPrompt, getBayeCapabilityCatalog } from './ai/domain-router.js';
 import { requestAICompletion, getAIProviderStatus } from './ai/provider-adapter.js';
@@ -226,4 +226,4 @@ app.get('/api/media/status', mediaStatusLimiter, async (req,res)=>{
 });
 // Normalize unexpected errors without exposing stack traces or secrets to clients.
 app.use((err,req,res,next)=>{console.error('Unhandled API error',err?.message||err);if(res.headersSent)return next(err);res.status(500).json({error:'Erreur interne. Réessaie plus tard.'});});
-const port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>console.log('BAYE AI gateway listening on '+port));
+const port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>{console.log('BAYE AI gateway listening on '+port);startPeriodicMonitor();});

@@ -1,5 +1,16 @@
 // BAYE AI CORE v2 — task routing, quality control and behavioral principles.
 // This is a software orchestration layer, not a newly trained foundation model.
+export const BAYE_IDENTITY = Object.freeze({
+  product: 'BAYE',
+  creator: 'CHEIKH AHMED TIDIANE TOURE',
+  company: 'WEMAD',
+  tagline: 'Une technologie au service des idées.'
+});
+const IDENTITY_RULES = [
+  'BAYE was created by CHEIKH AHMED TIDIANE TOURE and developed by WEMAD.',
+  'Never attribute BAYE creation or ownership to an external AI model or provider.',
+  'Providers power specific inference requests only; they are not BAYE creator or owner.'
+];
 const BAYE_PRINCIPLES = [
   'Be exceptionally capable for legitimate tasks: research, analysis, writing, coding, creativity and automation.',
   'Remain courteous and respectful, even if the user is frustrated or rude.',
@@ -26,15 +37,16 @@ const QUALITY_RULES = [
   'Respect privacy and avoid soliciting secrets, credentials or unnecessary sensitive data.',
   'Answer in the user’s language unless they request otherwise; avoid filler and empty promises.'
 ];
+export function getBayeIdentity() { return { ...BAYE_IDENTITY }; }
 export function buildBayeCorePrompt(kind='Texte') {
   const task=String(kind).slice(0,80);
   const specialization=TASK_RULES[task] || 'Deliver a relevant, well-organized and concrete response.';
-  return ['You are BAYE AI CORE v2, BAYE’s task orchestration and response-quality layer.',
+  return ['You are BAYE AI CORE v2, BAYE’s task orchestration and response-quality layer.', ...IDENTITY_RULES,
     'Role: professional, helpful, creative, courteous and honest general-purpose assistant.',
     ...BAYE_PRINCIPLES,
     'Language: answer in the language of the user unless explicitly asked otherwise.',
     'Task specialization: '+specialization, ...QUALITY_RULES, 'Studio task type: '+task].join(' ');
 }
 export function getCoreInfo() {
-  return {name:'BAYE AI CORE',version:'2.0.0',role:'task routing, response strategy and quality checks',capabilities:['task specialization','response planning','quality review','privacy-respecting behavior','courtesy'],foundationModelStatus:'external provider configured separately'};
+  return {name:'BAYE AI CORE',version:'2.0.0',role:'task routing, response strategy and quality checks',capabilities:['task specialization','response planning','quality review','privacy-respecting behavior','courtesy'],foundationModelStatus:'external provider configured separately',identity:getBayeIdentity()};
 }

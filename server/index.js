@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'node:crypto';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
@@ -10,6 +11,9 @@ import { createAcademyRouter } from './academy/router.js';
 import { buildDomainSystemPrompt, getBayeCapabilityCatalog } from './ai/domain-router.js';
 import { requestAICompletion, getAIProviderStatus } from './ai/provider-adapter.js';
 import { generateCloudflareImage, getMediaProviderStatus } from './ai/media-adapter.js';
+import { verifyTextOutput } from './verification-layer.js';
+import { validatePublicImageUrl } from './ai/image-url-validation.js';
+import { readJsonLimited } from './ai/bounded-json.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -25,6 +29,7 @@ app.use((req,res,next)=>{
 app.use(express.json({limit:'20kb'}));
 const allowedOrigin = process.env.BAYE_ORIGIN || 'https://baye-app.onrender.com';
 app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Content-Type','Authorization']}));
+app.use('/api/', (req,res,next)=>{res.setHeader('Cache-Control','no-store');next();});
 app.use('/api/', rateLimit({windowMs:60_000, max:30, standardHeaders:true, legacyHeaders:false}));
 const generationLimiter=rateLimit({windowMs:60_000,max:8,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes de génération. Réessaie dans une minute.'}});
 const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes média. Réessaie dans une minute.'}});
@@ -35,12 +40,19 @@ app.get('/api/independent-core/status',(_req,res)=>res.json(getIndependentCoreSt
 app.post('/api/independent-core/runtime',generationLimiter,(req,res)=>{try{res.json(runOwnedRuntime(req.body?.input));}catch(err){res.status(400).json({error:err.message||'Entrée invalide.'});}});
 app.post('/api/independent-core/plan',generationLimiter,(req,res)=>{try{const mission=req.body?.mission;if(typeof mission!=='string'||mission.trim().length===0)return res.status(400).json({error:'Mission requise.'});if(mission.length>4000)return res.status(400).json({error:'Mission trop longue (maximum 4 000 caractères).'});res.json(buildMissionPlan(mission));}catch(_err){res.status(400).json({error:'Mission invalide.'});}})
 
+function secureBearerMatch(req,secret){
+  if(typeof secret!=='string'||secret.length<32)return false;
+  const supplied=req.get('authorization')||'';
+  const expected='Bearer '+secret;
+  return supplied.length===expected.length&&crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected));
+}
+
 // BAYE Memory Engine: all write/search access is protected by a separately configured token.
 const memoryEngine=new MemoryEngine();
 app.use('/api/memory', (req,res,next)=>{
   const token=process.env.BAYE_MEMORY_TOKEN;
-  if(!token)return res.status(503).json({error:'Memory access token is not configured.'});
-  if(req.get('authorization')!=='Bearer '+token)return res.status(401).json({error:'Unauthorized'});
+  if(typeof token!=='string'||token.length<32)return res.status(503).json({error:'Memory access token is not securely configured.'});
+  if(!secureBearerMatch(req,token))return res.status(401).json({error:'Unauthorized'});
   next();
 });
 app.get('/api/memory/status',async(req,res)=>{try{res.json(await memoryEngine.status());}catch(_){res.status(500).json({error:'Memory status unavailable.'});}});
@@ -55,20 +67,20 @@ app.get('/api/capabilities', (_req,res)=>res.json({ ...getBayeCapabilityCatalog(
 // BAYE autonomous monitoring: restricted endpoint; secret must be configured in Render.
 app.get('/api/sentinel/status', (req,res)=>{
   const secret=process.env.BAYE_MONITOR_SECRET;
-  if(!secret)return res.status(503).json({error:'Monitoring access secret not configured'});
-  if(req.get('authorization') !== 'Bearer '+secret)return res.status(401).json({error:'Unauthorized'});
+  if(typeof secret!=='string'||secret.length<32)return res.status(503).json({error:'Monitoring access secret is not securely configured'});
+  if(!secureBearerMatch(req,secret))return res.status(401).json({error:'Unauthorized'});
   res.json(getMonitorStatus());
 });
 app.get('/api/sentinel/history', (req,res)=>{
   const secret=process.env.BAYE_MONITOR_SECRET;
-  if(!secret)return res.status(503).json({error:'Monitoring access secret not configured'});
-  if(req.get('authorization') !== 'Bearer '+secret)return res.status(401).json({error:'Unauthorized'});
+  if(typeof secret!=='string'||secret.length<32)return res.status(503).json({error:'Monitoring access secret is not securely configured'});
+  if(!secureBearerMatch(req,secret))return res.status(401).json({error:'Unauthorized'});
   res.json({items:getMonitorHistory()});
 });
 app.get('/api/monitor/check', async (req,res)=>{
   const secret=process.env.BAYE_MONITOR_SECRET;
-  if(!secret) return res.status(503).json({error:'Monitoring access secret not configured'});
-  if(req.get('authorization') !== 'Bearer '+secret) return res.status(401).json({error:'Unauthorized'});
+  if(typeof secret!=='string'||secret.length<32)return res.status(503).json({error:'Monitoring access secret is not securely configured'});
+  if(!secureBearerMatch(req,secret))return res.status(401).json({error:'Unauthorized'});
   try { res.json(await runMonitor()); }
   catch(_err){ res.status(500).json({error:'Monitoring check failed'}); }
 });
@@ -137,16 +149,18 @@ app.post('/api/generate', generationLimiter, async (req,res)=>{
     if(!key) return res.status(503).json({error:'Le moteur IA n’est pas encore configuré. Réessaie plus tard.'});
     const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
-    let output='',finishReason='stop';
+    let output='',finishReason='stop',actualModel=model,providerId='primary';
     const routed = buildDomainSystemPrompt(kind, prompt);
     const messages=[{role:'system',content:routed.systemPrompt},{role:'user',content:prompt}];
     for(let part=0;part<3;part++){
       const response=await callAI({key,endpoint,model,messages,max_tokens:8192,temperature:0.7});
-      output+=response.piece;finishReason=response.finishReason;
+      output+=response.piece;finishReason=response.finishReason;actualModel=response.model||actualModel;providerId=response.providerId||providerId;
       if(finishReason!=='length'||part===2)break;
       messages.push({role:'assistant',content:response.piece},{role:'user',content:'Continue exactly where you stopped, without repeating. Complete the answer.'});
     }
-    res.json({result:output,model,core:getCoreInfo(),domain:routed.route,partial:finishReason==='length'});
+    const outputVerification=verifyTextOutput(output,{label:'generation_result',maxLength:100000});
+    if(!outputVerification.passed)return res.status(502).json({error:'BAYE a produit une sortie invalide. Réessaie.',verification:outputVerification});
+    res.json({result:output,model:actualModel,provider:providerId,core:getCoreInfo(),domain:routed.route,partial:finishReason==='length',verification:{passed:true,scope:'structural_only',checks:outputVerification.checks}});
   } catch(err){console.error('BAYE gateway error',err);res.status(502).json({error:'Le moteur IA rencontre un problème. Réessaie plus tard.'});}
 });
 
@@ -166,11 +180,15 @@ app.post('/api/agent', generationLimiter, async (req,res)=>{
       {role:'user',content:prompt}
     ],max_tokens:900,temperature:0.2});
     const plan=planResponse.piece;
+    const planVerification=verifyTextOutput(plan,{label:'plan',maxLength:12000});
+    if(!planVerification.passed)return res.status(502).json({error:'BAYE Agent a produit un plan invalide. Réessaie.',verification:planVerification});
     const finalResponse=await callAI({key,endpoint,model,messages:[
       {role:'system',content:buildBayeCorePrompt(kind)+' Tu es BAYE Agent. Réalise le plan fourni. Avant de répondre, vérifie silencieusement les erreurs, omissions, contradictions, sécurité et affirmations non vérifiées; corrige-les. Ne prétends pas avoir réalisé d actions externes ni consulté des sources. Retourne directement la réponse finale.'},
       {role:'user',content:'Objectif : '+prompt+'\nPlan :\n'+plan}
     ],max_tokens:4500,temperature:0.4});
-    res.json({result:finalResponse.piece,plan,model,core:{...getCoreInfo(),agentMode:'plan-and-integrated-review',steps:2},verifiedByReview:true});
+    const outputVerification=verifyTextOutput(finalResponse.piece,{label:'final_response',maxLength:40000});
+    if(!outputVerification.passed)return res.status(502).json({error:'BAYE Agent a produit une réponse invalide. Réessaie.',verification:outputVerification});
+    res.json({result:finalResponse.piece,plan,model:finalResponse.model||model,provider:finalResponse.providerId||'primary',core:{...getCoreInfo(),agentMode:'prompted-review-plus-structural-verification',steps:2},verification:{passed:true,scope:'structural_only',plan:planVerification,result:outputVerification}});
   }catch(err){console.error('BAYE agent error',err);res.status(502).json({error:'BAYE Agent n’a pas pu terminer. Réessaie plus tard.'});}
 });
 const falModels = {image:'fal-ai/flux/schnell',video:'fal-ai/kling-video/v2.1/standard/text-to-video'};
@@ -187,14 +205,12 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
     const falKey=process.env.FAL_KEY;
     if(!falKey) return res.status(503).json({code:'VIDEO_PROVIDER_NOT_CONFIGURED',error:'La génération vidéo nécessite la configuration d’un fournisseur vidéo. Aucun coût ne sera déclenché automatiquement.'});
     if(image_url){
-      if(typeof image_url!=='string'||image_url.length>2048)return res.status(400).json({error:'URL image invalide.'});
-      try{const parsed=new URL(image_url);if(parsed.protocol!=='https:'||parsed.username||parsed.password)return res.status(400).json({error:'L’image doit utiliser une URL HTTPS valide.'});}
-      catch{return res.status(400).json({error:'URL image invalide.'});}
+      if(typeof image_url!=='string'||image_url.length>2048||!validatePublicImageUrl(image_url))return res.status(400).json({error:'L’image doit utiliser une URL HTTPS publique valide, sans port ni adresse locale.'});
     }
     const model=falModels.video,payload={prompt:prompt.trim()};if(image_url)payload.image_url=image_url;
     const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});
-    if(!upstream.ok){const detail=await upstream.text();console.error('fal video submission error',upstream.status,detail.slice(0,300));const exhausted=upstream.status===403&&/exhausted balance|user is locked/i.test(detail);return res.status(502).json({code:exhausted?'PROVIDER_BALANCE_EXHAUSTED':'MEDIA_PROVIDER_REJECTED',error:exhausted?'Le fournisseur vidéo externe a épuisé son solde. BAYE n’a pas pu lancer cette génération.':'Le fournisseur vidéo externe a refusé cette demande. BAYE n’a pas pu lancer cette génération.'});}
-    const data=await upstream.json();res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type=video&request_id='+encodeURIComponent(data.request_id)});
+    if(!upstream.ok){console.warn('fal video submission rejected',upstream.status);return res.status(502).json({code:'MEDIA_PROVIDER_REJECTED',error:'Le fournisseur vidéo externe a refusé cette demande. BAYE n’a pas pu lancer cette génération.'});}
+    const data=await readJsonLimited(upstream);if(typeof data?.request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(data.request_id))return res.status(502).json({error:'Le fournisseur vidéo a retourné un identifiant invalide.'});res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type=video&request_id='+encodeURIComponent(data.request_id)});
   }catch(err){
     if(err?.code==='MEDIA_NOT_CONFIGURED')return res.status(503).json({code:err.code,error:err.message});
     if(err?.code==='MEDIA_INVALID_PROMPT')return res.status(400).json({code:err.code,error:err.message});
@@ -218,10 +234,10 @@ app.get('/api/media/status', mediaStatusLimiter, async (req,res)=>{
     const {type,request_id}=req.query;if(type!=='video'||typeof request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(request_id))return res.status(400).json({error:'Paramètres invalides.'});
     const model=falModels.video;const statusRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id+'/status',{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});
     if(!statusRes.ok)return res.status(502).json({error:'Impossible de vérifier la génération.'});
-    const status=await statusRes.json();if(status.status!=='COMPLETED')return res.json({status:status.status});
+    const status=await readJsonLimited(statusRes,1024*1024);if(status.status!=='COMPLETED')return res.json({status:status.status});
     const resultRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id,{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});
     if(!resultRes.ok)return res.status(502).json({error:'Résultat indisponible.'});
-    const result=await resultRes.json();res.json({status:'COMPLETED',result});
+    const result=await readJsonLimited(resultRes);res.json({status:'COMPLETED',result});
   }catch(err){console.error('BAYE media status error',err);res.status(500).json({error:'Erreur interne de vérification.'});}
 });
 // Normalize unexpected errors without exposing stack traces or secrets to clients.

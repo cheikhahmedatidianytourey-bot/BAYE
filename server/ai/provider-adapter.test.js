@@ -18,7 +18,7 @@ test('uses fallback after primary failure and reports which provider answered', 
   const fetchImpl = async (url) => {
     calls.push(url);
     if (url.startsWith('https://primary.example')) return { ok: false, status: 503 };
-    return { ok: true, json: async () => ({ choices: [{ message: { content: 'réponse', }, finish_reason: 'stop' }] }) };
+    return { ok: true, json: async () => ({ choices: [{ message: { content: 'réponse' }, finish_reason: 'stop' }] }) };
   };
   const result = await requestAICompletion({
     primary,
@@ -35,15 +35,50 @@ test('uses fallback after primary failure and reports which provider answered', 
   assert.equal(result.piece, 'réponse');
 });
 
+test('uses explicit fallback when primary returns an empty response', async () => {
+  const calls = [];
+  const result = await requestAICompletion({
+    primary,
+    env: {
+      AI_FALLBACK_API_KEY: 'fallback-secret',
+      AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1',
+      AI_FALLBACK_MODEL: 'fallback-model'
+    },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async (url) => {
+      calls.push(url);
+      return url.startsWith('https://primary.example')
+        ? { ok: true, json: async () => ({ choices: [{ message: { content: '   ' } }] }) }
+        : { ok: true, json: async () => ({ choices: [{ message: { content: 'fallback response' } }] }) };
+    }
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(result.providerId, 'fallback');
+  assert.equal(result.piece, 'fallback response');
+});
+
 test('does not silently invent a fallback provider', async () => {
   let calls = 0;
   await assert.rejects(() => requestAICompletion({
     primary,
     env: {},
-    messages: [],
+    messages: [{ role: 'user', content: 'test' }],
     fetchImpl: async () => { calls++; return { ok: false, status: 503 }; }
   }), /All configured AI providers failed/);
   assert.equal(calls, 1);
+});
+
+test('provider failure summary contains status but never credentials', async () => {
+  await assert.rejects(() => requestAICompletion({
+    primary,
+    env: {},
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async () => ({ ok: false, status: 401 })
+  }), error => {
+    assert.match(error.message, /primary:401/);
+    assert.equal(error.message.includes('primary-secret'), false);
+    return true;
+  });
 });
 
 test('provider status exposes configuration booleans but no secrets', () => {
@@ -56,4 +91,132 @@ test('provider status exposes configuration booleans but no secrets', () => {
   assert.equal(status.primaryConfigured, true);
   assert.equal(status.fallbackConfigured, true);
   assert.equal(JSON.stringify(status).includes('secret'), false);
+});
+
+
+test('malformed provider JSON triggers explicit fallback rather than crashing', async () => {
+  const result = await requestAICompletion({
+    primary,
+    env: {
+      AI_FALLBACK_API_KEY: 'fallback-secret',
+      AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1',
+      AI_FALLBACK_MODEL: 'fallback-model'
+    },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async (url) => url.startsWith('https://primary.example')
+      ? { ok: true, json: async () => { throw new Error('malformed'); } }
+      : { ok: true, json: async () => ({ choices: [{ message: { content: 'safe fallback' } }] }) }
+  });
+  assert.equal(result.providerId, 'fallback');
+  assert.equal(result.piece, 'safe fallback');
+});
+
+test('timeout or network exception falls through only to explicitly configured provider', async () => {
+  let calls = 0;
+  const result = await requestAICompletion({
+    primary,
+    env: {
+      AI_FALLBACK_API_KEY: 'fallback-secret',
+      AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1',
+      AI_FALLBACK_MODEL: 'fallback-model'
+    },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async (url) => {
+      calls++;
+      if (url.startsWith('https://primary.example')) throw new Error('timeout');
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) };
+    }
+  });
+  assert.equal(calls, 2);
+  assert.equal(result.providerId, 'fallback');
+});
+
+test('rejects invalid message payloads and out-of-range request options before network access', async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls++; };
+  await assert.rejects(() => requestAICompletion({ primary, messages: [], fetchImpl }), /messages/);
+  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], max_tokens: 0, fetchImpl }), /max_tokens/);
+  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], temperature: 3, fetchImpl }), /temperature/);
+  await assert.rejects(() => requestAICompletion({ primary, messages: [{ role: 'user', content: 'ok' }], timeoutMs: 500, fetchImpl }), /timeout/);
+  assert.equal(calls, 0);
+});
+
+
+test('rejects oversized declared provider response and tries configured fallback', async () => {
+  const result = await requestAICompletion({
+    primary,
+    env: { AI_FALLBACK_API_KEY: 'fallback-secret', AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1', AI_FALLBACK_MODEL: 'fallback-model' },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async (url) => url.startsWith('https://primary.example')
+      ? { ok: true, headers: { get: () => String(6 * 1024 * 1024) }, json: async () => { throw new Error('should not parse oversized response'); } }
+      : { ok: true, json: async () => ({ choices: [{ message: { content: 'fallback safe' } }] }) }
+  });
+  assert.equal(result.providerId, 'fallback');
+  assert.equal(result.piece, 'fallback safe');
+});
+
+
+test('bounds streamed provider responses even without a content-length header', async () => {
+  let primaryJsonParsed = false;
+  const result = await requestAICompletion({
+    primary,
+    env: { AI_FALLBACK_API_KEY: 'fallback-secret', AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1', AI_FALLBACK_MODEL: 'fallback-model' },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async (url) => {
+      if (url.startsWith('https://primary.example')) {
+        const body = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(5 * 1024 * 1024 + 1));
+            controller.close();
+          }
+        });
+        return { ok: true, headers: { get: () => null }, body, json: async () => { primaryJsonParsed = true; } };
+      }
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'bounded fallback' } }] }) };
+    }
+  });
+  assert.equal(primaryJsonParsed, false);
+  assert.equal(result.providerId, 'fallback');
+  assert.equal(result.piece, 'bounded fallback');
+});
+
+
+test('bounds provider JSON responses without a stream reader', async () => {
+  const result = await requestAICompletion({
+    primary,
+    env: { AI_FALLBACK_API_KEY: 'fallback-secret', AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1', AI_FALLBACK_MODEL: 'fallback-model' },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async (url) => url.startsWith('https://primary.example')
+      ? { ok: true, headers: { get: () => null }, json: async () => ({ oversized: 'x'.repeat(5 * 1024 * 1024 + 1) }) }
+      : { ok: true, headers: { get: () => null }, json: async () => ({ choices: [{ message: { content: 'bounded fallback' } }] }) }
+  });
+  assert.equal(result.providerId, 'fallback');
+  assert.equal(result.piece, 'bounded fallback');
+});
+
+
+test('rejects non-HTTPS or credential-bearing provider endpoints before network access', async () => {
+  let calls = 0;
+  for (const endpoint of ['http://provider.example/v1', 'https://user:pass@provider.example/v1']) {
+    await assert.rejects(() => requestAICompletion({
+      primary: { key: 'k', endpoint, model: 'm' },
+      env: {}, messages: [{ role: 'user', content: 'test' }],
+      fetchImpl: async () => { calls++; }
+    }), /HTTPS URL/);
+  }
+  assert.equal(calls, 0);
+});
+
+test('cancels upstream error response bodies before fallback', async () => {
+  let cancelled = false;
+  const result = await requestAICompletion({
+    primary,
+    env: { AI_FALLBACK_API_KEY: 'fallback-secret', AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1', AI_FALLBACK_MODEL: 'fallback-model' },
+    messages: [{ role: 'user', content: 'test' }],
+    fetchImpl: async url => url.startsWith('https://primary.example')
+      ? { ok: false, status: 503, body: { cancel: async () => { cancelled = true; } } }
+      : { ok: true, body: new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] })).body, headers: new Headers(), status: 200 }
+  });
+  assert.equal(cancelled, true);
+  assert.equal(result.providerId, 'fallback');
 });

@@ -1,28 +1,48 @@
-// BAYE Memory Engine v0.1 — JSON-backed, bounded, access-token protected.
+// BAYE Memory Engine v0.3 — serialized mutations and private atomic file writes.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+const MAX_MEMORY_FILE_BYTES = 8 * 1024 * 1024;
+
 export class MemoryEngine {
   constructor({filePath=process.env.BAYE_MEMORY_FILE||'/data/baye-memory.json',maxEntries=500}={}) {
-    this.filePath=filePath;this.maxEntries=maxEntries;
+    if(typeof filePath!=='string'||!filePath.trim())throw new TypeError('Memory file path must be a non-empty string.');
+    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>10000)throw new TypeError('maxEntries must be an integer between 1 and 10000.');
+    this.filePath=filePath;this.maxEntries=maxEntries;this.mutationQueue=Promise.resolve();
   }
   async readAll(){
-    try{const data=JSON.parse(await fs.readFile(this.filePath,'utf8'));return Array.isArray(data)?data:[];}
-    catch(err){if(err.code==='ENOENT')return [];throw err;}
+    try{
+      const stat=await fs.stat(this.filePath);
+      if(stat.size>MAX_MEMORY_FILE_BYTES)throw new Error('Memory file exceeds the configured size limit.');
+      const data=JSON.parse(await fs.readFile(this.filePath,'utf8'));
+      if(!Array.isArray(data))throw new Error('Memory file format is invalid.');
+      return data.filter(e=>e&&typeof e==='object'&&!Array.isArray(e)&&Object.keys(e).every(key=>['id','text','tags','createdAt'].includes(key))&&typeof e.id==='string'&&e.id.length>0&&e.id.length<=200&&typeof e.text==='string'&&e.text.trim().length>0&&e.text.length<=4000&&Array.isArray(e.tags)&&e.tags.length<=20&&e.tags.every(t=>typeof t==='string'&&t.length<=50)&&(e.createdAt===undefined||(typeof e.createdAt==='string'&&Number.isFinite(Date.parse(e.createdAt))))).slice(0,this.maxEntries);
+    }catch(err){if(err.code==='ENOENT')return [];throw err;}
   }
   async writeAll(entries){
-    await fs.mkdir(path.dirname(this.filePath),{recursive:true});
-    const temp=this.filePath+'.tmp';
-    await fs.writeFile(temp,JSON.stringify(entries,null,2),'utf8');
-    await fs.rename(temp,this.filePath);
+    await fs.mkdir(path.dirname(this.filePath),{recursive:true,mode:0o700});
+    const temp=this.filePath+'.'+crypto.randomUUID()+'.tmp';
+    try{
+      await fs.writeFile(temp,JSON.stringify(entries,null,2),{encoding:'utf8',mode:0o600,flag:'wx'});
+      await fs.rename(temp,this.filePath);
+      await fs.chmod(this.filePath,0o600).catch(()=>{});
+    }finally{await fs.rm(temp,{force:true}).catch(()=>{});}
   }
-  async add({text,tags=[]}){
+  _serializeMutation(fn){
+    const next=this.mutationQueue.then(fn,fn);
+    this.mutationQueue=next.catch(()=>{});
+    return next;
+  }
+  async add({text,tags=[]}={}){
     if(typeof text!=='string'||!text.trim()||text.length>4000)throw new Error('Memory text required (1-4000 characters).');
-    if(!Array.isArray(tags)||tags.length>20||tags.some(t=>typeof t!=='string'||t.length>50))throw new Error('Invalid tags.');
-    const entries=await this.readAll();
-    const item={id:crypto.randomUUID(),text:text.trim(),tags:tags.map(t=>t.trim()).filter(Boolean),createdAt:new Date().toISOString()};
-    entries.unshift(item);await this.writeAll(entries.slice(0,this.maxEntries));return item;
+    if(!Array.isArray(tags)||tags.length>20||tags.some(t=>typeof t!=='string'||t.trim().length>50))throw new Error('Invalid tags.');
+    const normalizedTags=[...new Set(tags.map(t=>t.trim()).filter(Boolean))];
+    return this._serializeMutation(async()=>{
+      const entries=await this.readAll();
+      const item={id:crypto.randomUUID(),text:text.trim(),tags:normalizedTags,createdAt:new Date().toISOString()};
+      entries.unshift(item);await this.writeAll(entries.slice(0,this.maxEntries));return item;
+    });
   }
   async search(query=''){
     if(typeof query!=='string'||query.length>200)throw new Error('Invalid search query.');
@@ -30,10 +50,12 @@ export class MemoryEngine {
     return entries.filter(e=>!q||e.text.toLowerCase().includes(q)||e.tags.some(t=>t.toLowerCase().includes(q))).slice(0,100);
   }
   async remove(id){
-    if(typeof id!=='string'||!id)throw new Error('Memory id required.');
-    const entries=await this.readAll(),next=entries.filter(e=>e.id!==id);
-    if(next.length===entries.length)return false;await this.writeAll(next);return true;
+    if(typeof id!=='string'||!id||id.length>200)throw new Error('Memory id required.');
+    return this._serializeMutation(async()=>{
+      const entries=await this.readAll(),next=entries.filter(e=>e.id!==id);
+      if(next.length===entries.length)return false;await this.writeAll(next);return true;
+    });
   }
-  async clear(){await this.writeAll([]);}
-  async status(){return {name:'BAYE Memory Engine',version:'0.1.0',storage:'JSON file',filePath:this.filePath,entries:(await this.readAll()).length,maxEntries:this.maxEntries,persistenceNote:'Durability across redeploys requires a Render persistent disk mounted at this path.',enabled:true};}
+  async clear(){return this._serializeMutation(()=>this.writeAll([]));}
+  async status(){return {name:'BAYE Memory Engine',version:'0.3.0',storage:'JSON file',entries:(await this.readAll()).length,maxEntries:this.maxEntries,persistenceNote:'Durability across redeploys requires a persistent disk mounted at this path.',concurrencyScope:'single-process only',multiInstanceSafe:false,enabled:true};}
 }

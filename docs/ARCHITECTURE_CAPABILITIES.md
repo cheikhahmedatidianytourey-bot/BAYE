@@ -56,3 +56,16 @@ La CI exécute `npm test` et `npm run build`. Les tests de cette branche vérifi
 - `GET /api/capabilities` expose séparément la configuration des fournisseurs image et vidéo, sans révéler les secrets.
 - L’interface affiche directement l’image générée; la vidéo conserve le suivi de tâche. Les erreurs de quota et d’absence de configuration sont explicites.
 - Aucun fournisseur de secours payant n’est activé automatiquement. La disponibilité réelle doit être confirmée par un test de production après configuration des secrets.
+
+## Garanties opérationnelles et limites multi-instance
+
+Les protections suivantes sont actuellement **locales au processus Node.js** et ne doivent pas être confondues avec une coordination distribuée :
+
+- Les limites de débit Express utilisent le stockage mémoire par défaut. Les compteurs sont donc indépendants dans chaque instance et sont réinitialisés au redémarrage.
+- La file de mutations de `MemoryEngine` sérialise les écritures dans une instance seulement. Plusieurs instances partageant le même fichier peuvent entrer en concurrence.
+- SENTINEL planifie ses contrôles et conserve son historique depuis chaque processus. Plusieurs instances peuvent déclencher des contrôles redondants et écrire simultanément dans le même fichier d'historique.
+- Le disque persistant garantit la conservation des fichiers lors des redémarrages compatibles avec l'hébergement; il ne fournit pas à lui seul un verrouillage distribué ni une cohérence transactionnelle entre instances.
+
+**Règle de déploiement actuelle :** conserver une seule instance du backend lorsque le stockage fichier est utilisé. Avant toute montée en charge horizontale, migrer vers un stockage partagé adapté, mettre en place un mécanisme de coordination/verrouillage et un magasin de limites de débit partagé, puis valider les scénarios de concurrence et de reprise par des tests d'intégration.
+
+Ces limites sont explicites dans les réponses d'état de Memory Engine et de SENTINEL. Aucune haute disponibilité multi-instance n'est revendiquée tant que ces composants partagés ne sont pas installés et vérifiés.

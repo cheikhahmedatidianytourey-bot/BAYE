@@ -45,3 +45,17 @@ test('memory engine caps retained entries',async()=>{
   assert.equal((await engine.search()).length,2);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+test('memory engine reloads persisted entries in a new instance',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'baye-memory-restart-test-'));
+ const filePath=join(dir,'memory.json');
+ try{
+  const firstProcess=new MemoryEngine({filePath});
+  const saved=await firstProcess.add({text:'Persistence survives engine reconstruction',tags:['durability']});
+  const restartedProcess=new MemoryEngine({filePath});
+  const restored=await restartedProcess.search('durability');
+  assert.equal(restored.length,1);
+  assert.equal(restored[0].id,saved.id);
+  assert.equal(restored[0].text,'Persistence survives engine reconstruction');
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

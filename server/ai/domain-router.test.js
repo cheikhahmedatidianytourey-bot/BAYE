@@ -32,3 +32,26 @@ test('capability catalog does not overstate unavailable systems', () => {
   assert.equal(catalog.runtime.mediaProviders.video, 'external_fal_adapter');
   assert.ok(catalog.domains.length >= 15);
 });
+
+test('detects relevant secondary disciplines for multidisciplinary requests', () => {
+  const route = routeBayeDomain('Conçois un robot médical avec une API Python et analyse des symptômes');
+  assert.equal(route.domain, 'computer_science');
+  assert.ok(route.disciplines.some(item => item.id === 'engineering'));
+  assert.ok(route.disciplines.some(item => item.id === 'medicine'));
+  assert.equal(route.multiDomain, true);
+});
+
+test('multidisciplinary prompt includes selected specialist methods', () => {
+  const built = buildDomainSystemPrompt('Projet', 'Créer un robot médical avec programmation Python');
+  assert.ok(built.route.disciplines.length > 1);
+  assert.match(built.systemPrompt, /MÉTHODE INFORMATIQUE/);
+  assert.match(built.systemPrompt, /MÉTHODE INGÉNIERIE/);
+});
+
+test('avoids accidental substring matches for short technical keywords', () => {
+  assert.equal(routeBayeDomain('Le trajet sera rapide demain').domain, 'general');
+});
+
+test('matches technical keywords as words and still handles accents', () => {
+  assert.equal(routeBayeDomain('Écris du code Python').domain, 'computer_science');
+});

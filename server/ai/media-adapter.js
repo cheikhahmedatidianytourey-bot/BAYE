@@ -1,4 +1,6 @@
+import { readJsonLimited } from './bounded-json.js';
 const IMAGE_MODEL='@cf/black-forest-labs/flux-1-schnell';
+const MAX_IMAGE_BASE64_LENGTH=10*1024*1024;
 
 export function getMediaProviderStatus(env=process.env){
   return {
@@ -15,7 +17,7 @@ export async function generateCloudflareImage({prompt,env=process.env,fetchImpl=
   }
   const url='https://api.cloudflare.com/client/v4/accounts/'+encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)+'/ai/run/'+IMAGE_MODEL;
   const response=await fetchImpl(url,{method:'POST',headers:{Authorization:'Bearer '+env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({prompt,steps:4}),signal:AbortSignal.timeout(90000)});
-  const data=await response.json().catch(()=>null);
+  const data=await readJsonLimited(response, 12 * 1024 * 1024).catch(()=>null);
   if(!response.ok||data?.success===false){
     // Keep provider diagnostics useful while never returning credentials or request headers.
     const rawErrors=Array.isArray(data?.errors)?data.errors:[];
@@ -25,7 +27,7 @@ export async function generateCloudflareImage({prompt,env=process.env,fetchImpl=
       const message=rawMessage
         .replaceAll(String(env.CLOUDFLARE_API_TOKEN),'[REDACTED]')
         .replaceAll(String(env.CLOUDFLARE_ACCOUNT_ID),'[REDACTED]')
-        .replace(/[\\r\\n\\t]+/g,' ')
+        .replace(/[\r\n\t]+/g,' ')
         .slice(0,240);
       return {code:Number.isFinite(Number(rawCode))?Number(rawCode):undefined,message:message||'Cloudflare a retourné une erreur sans détail.'};
     });
@@ -44,5 +46,6 @@ export async function generateCloudflareImage({prompt,env=process.env,fetchImpl=
   }
   const image=data?.result?.image;
   if(typeof image!=='string'||!image.length){const error=new Error('Le fournisseur n’a retourné aucune image exploitable.');error.code='MEDIA_EMPTY_RESULT';throw error;}
+  if(image.length>MAX_IMAGE_BASE64_LENGTH){const error=new Error('Le résultat image dépasse la taille maximale autorisée par BAYE.');error.code='MEDIA_RESULT_TOO_LARGE';throw error;}
   return {status:'COMPLETED',provider:'cloudflare-workers-ai',model:IMAGE_MODEL,result:{images:[{url:'data:image/jpeg;base64,'+image}]}};
 }

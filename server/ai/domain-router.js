@@ -7,7 +7,7 @@ export const BAYE_DOMAINS = Object.freeze([
   { id: 'biology', label: 'Biologie', terms: ['biologie', 'cellule', 'génétique', 'genetique', 'écologie', 'ecologie', 'organisme', 'adn'] },
   { id: 'medicine', label: 'Médecine et santé', terms: ['médecine', 'medecine', 'médical', 'medical', 'symptôme', 'symptome', 'diagnostic', 'traitement', 'santé', 'sante', 'posologie'] },
   { id: 'computer_science', label: 'Informatique et programmation', terms: ['code', 'programmer', 'programmation', 'javascript', 'python', 'typescript', 'api', 'algorithme', 'logiciel', 'base de données', 'base de donnees', 'bug', 'débogage', 'debug'] },
-  { id: 'engineering', label: 'Ingénierie', terms: ['ingénierie', 'ingenierie', 'ingénieur', 'ingenieur', 'moteur', 'robotique', 'électronique', 'electronique', 'mécatronique', 'mecatronique', 'structure', 'matériau', 'materiau'] },
+  { id: 'engineering', label: 'Ingénierie', terms: ['ingénierie', 'ingenierie', 'ingénieur', 'ingenieur', 'moteur', 'robot', 'robotique', 'électronique', 'electronique', 'mécatronique', 'mecatronique', 'structure', 'matériau', 'materiau'] },
   { id: 'ai', label: 'Intelligence artificielle', terms: ['intelligence artificielle', 'machine learning', 'deep learning', 'réseau neuronal', 'reseau neuronal', 'llm', 'modèle ia', 'modele ia', 'agent ia'] },
   { id: 'cybersecurity', label: 'Cybersécurité', terms: ['cybersécurité', 'cybersecurite', 'sécurité informatique', 'securite informatique', 'pentest', 'vulnérabilité', 'vulnerabilite', 'chiffrement', 'authentification'] },
   { id: 'economics', label: 'Économie et finance', terms: ['économie', 'economie', 'finance', 'comptabilité', 'comptabilite', 'budget', 'investissement', 'marché', 'marche', 'inflation'] },
@@ -24,6 +24,12 @@ export const BAYE_DOMAINS = Object.freeze([
 ]);
 
 const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const escapeRegex = value => [...value].map(char => '.*+?^${}()|[]\\'.includes(char) ? '\\' + char : char).join('');
+const matchesTerm = (text, term) => {
+  const normalizedTerm = normalize(term).trim();
+  if (!normalizedTerm) return false;
+  return new RegExp('(^|[^a-z0-9])' + escapeRegex(normalizedTerm) + '(s?)([^a-z0-9]|$)').test(text);
+};
 
 const DOMAIN_METHODS = {
   mathematics: 'MÉTHODE MATHÉMATIQUE : définis les objets et hypothèses; vérifie les domaines et conditions; déroule les calculs sans sauts injustifiés; distingue preuve générale, exemple numérique, conjecture et calcul fini. Ne présente jamais un problème ouvert comme résolu.',
@@ -50,14 +56,29 @@ const DOMAIN_METHODS = {
 
 export function routeBayeDomain(prompt, kind = 'Texte') {
   const text = normalize(String(kind) + ' ' + String(prompt));
-  let best = { domain: 'general', score: 0 };
-  for (const domain of BAYE_DOMAINS) {
-    if (domain.id === 'general') continue;
-    const score = domain.terms.reduce((sum, term) => sum + (text.includes(normalize(term)) ? Math.max(1, normalize(term).split(' ').length) : 0), 0);
-    if (score > best.score) best = { domain: domain.id, score };
-  }
+  const ranked = BAYE_DOMAINS.filter(domain => domain.id !== 'general')
+    .map(domain => ({
+      domain: domain.id,
+      score: domain.terms.reduce((sum, term) => sum + (matchesTerm(text, term) ? (['python', 'javascript', 'typescript', 'api', 'programmation', 'programmer', 'code', 'algorithme', 'logiciel', 'base de donnees'].includes(normalize(term)) ? 3 : Math.max(1, normalize(term).split(' ').length)) : 0), 0)
+    }))
+    .filter(item => item.score > 0)
+    .sort((a,b) => b.score-a.score || a.domain.localeCompare(b.domain));
+  const best = ranked[0] || { domain: 'general', score: 0 };
   const selected = BAYE_DOMAINS.find(item => item.id === best.domain) || BAYE_DOMAINS.at(-1);
-  return { domain: selected.id, label: selected.label, confidence: best.score === 0 ? 'fallback' : best.score >= 3 ? 'strong_keyword_match' : 'keyword_match', score: best.score };
+  // Secondary matches use a lower threshold so genuinely relevant disciplines are not omitted.
+  const secondary = ranked.slice(1).filter(item => item.score >= 1 && item.score >= best.score * 0.15);
+  const disciplines = [best, ...secondary].map(item => {
+    const domain = BAYE_DOMAINS.find(d => d.id === item.domain);
+    return { id: item.domain, label: domain.label, score: item.score };
+  });
+  return {
+    domain: selected.id,
+    label: selected.label,
+    confidence: best.score === 0 ? 'fallback' : best.score >= 3 ? 'strong_keyword_match' : 'keyword_match',
+    score: best.score,
+    disciplines,
+    multiDomain: disciplines.length > 1
+  };
 }
 
 export function buildDomainSystemPrompt(kind, prompt) {
@@ -67,7 +88,7 @@ export function buildDomainSystemPrompt(kind, prompt) {
     systemPrompt: [
       buildBayeCorePrompt(kind),
       'BAYE DOMAIN ROUTER: domaine sélectionné = ' + route.label + '.',
-      DOMAIN_METHODS[route.domain],
+      route.disciplines.map(item => DOMAIN_METHODS[item.id]),
       'Si la demande traverse plusieurs domaines, signale les disciplines mobilisées et traite leurs interactions au lieu de forcer une seule spécialité.',
       'Ne confonds jamais expertise de rédaction avec preuve scientifique, validation réglementaire, diagnostic médical ou certification professionnelle.'
     ].join('\n')

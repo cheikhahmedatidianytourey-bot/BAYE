@@ -208,7 +208,7 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
     }
     const model=falModels.video,payload={prompt:prompt.trim()};if(image_url)payload.image_url=image_url;
     const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});
-    if(!upstream.ok){console.warn('fal video submission rejected',upstream.status);const exhausted=upstream.status===403;return res.status(502).json({code:exhausted?'PROVIDER_BALANCE_EXHAUSTED':'MEDIA_PROVIDER_REJECTED',error:exhausted?'Le fournisseur vidéo externe a épuisé son solde. BAYE n’a pas pu lancer cette génération.':'Le fournisseur vidéo externe a refusé cette demande. BAYE n’a pas pu lancer cette génération.'});}
+    if(!upstream.ok){console.warn('fal video submission rejected',upstream.status);const exhausted=false;return res.status(502).json({code:exhausted?'PROVIDER_BALANCE_EXHAUSTED':'MEDIA_PROVIDER_REJECTED',error:exhausted?'Le fournisseur vidéo externe a épuisé son solde. BAYE n’a pas pu lancer cette génération.':'Le fournisseur vidéo externe a refusé cette demande. BAYE n’a pas pu lancer cette génération.'});}
     const data=await readJsonLimited(upstream);if(typeof data?.request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(data.request_id))return res.status(502).json({error:'Le fournisseur vidéo a retourné un identifiant invalide.'});res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type=video&request_id='+encodeURIComponent(data.request_id)});
   }catch(err){
     if(err?.code==='MEDIA_NOT_CONFIGURED')return res.status(503).json({code:err.code,error:err.message});

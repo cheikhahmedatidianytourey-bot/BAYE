@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
 import { buildMissionPlan, getIndependentCoreStatus } from './independent-core.js';
 import { runOwnedRuntime } from './owned-runtime.js';
+import { MemoryEngine } from './memory-engine.js';
 import { runMonitor } from './baye-monitor.js';
 import { createAcademyRouter } from './academy/router.js';
 import { buildDomainSystemPrompt, getBayeCapabilityCatalog } from './ai/domain-router.js';
@@ -33,6 +34,21 @@ app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',c
 app.get('/api/independent-core/status',(_req,res)=>res.json(getIndependentCoreStatus()));
 app.post('/api/independent-core/runtime',generationLimiter,(req,res)=>{try{res.json(runOwnedRuntime(req.body?.input));}catch(err){res.status(400).json({error:err.message||'Entrée invalide.'});}});
 app.post('/api/independent-core/plan',generationLimiter,(req,res)=>{try{const mission=req.body?.mission;if(typeof mission!=='string'||mission.trim().length===0)return res.status(400).json({error:'Mission requise.'});if(mission.length>4000)return res.status(400).json({error:'Mission trop longue (maximum 4 000 caractères).'});res.json(buildMissionPlan(mission));}catch(_err){res.status(400).json({error:'Mission invalide.'});}})
+
+// BAYE Memory Engine: all write/search access is protected by a separately configured token.
+const memoryEngine=new MemoryEngine();
+app.use('/api/memory', (req,res,next)=>{
+  const token=process.env.BAYE_MEMORY_TOKEN;
+  if(!token)return res.status(503).json({error:'Memory access token is not configured.'});
+  if(req.get('authorization')!=='Bearer '+token)return res.status(401).json({error:'Unauthorized'});
+  next();
+});
+app.get('/api/memory/status',async(req,res)=>{try{res.json(await memoryEngine.status());}catch(_){res.status(500).json({error:'Memory status unavailable.'});}});
+app.get('/api/memory/search',async(req,res)=>{try{res.json({items:await memoryEngine.search(typeof req.query.q==='string'?req.query.q:'')});}catch(err){res.status(400).json({error:err.message});}});
+app.post('/api/memory',async(req,res)=>{try{res.status(201).json(await memoryEngine.add(req.body||{}));}catch(err){res.status(400).json({error:err.message});}});
+app.delete('/api/memory/:id',async(req,res)=>{try{const removed=await memoryEngine.remove(req.params.id);res.json({removed});}catch(err){res.status(400).json({error:err.message});}});
+app.delete('/api/memory',async(req,res)=>{try{await memoryEngine.clear();res.json({cleared:true});}catch(_){res.status(500).json({error:'Unable to clear memory.'});}});
+
 app.get('/api/capabilities', (_req,res)=>res.json({ ...getBayeCapabilityCatalog(), providers: getAIProviderStatus(), media: getMediaProviderStatus() }));
 
 

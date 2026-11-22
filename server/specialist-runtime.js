@@ -22,7 +22,7 @@ function safeOutput(value){
  if(typeof serialized!=='string'||serialized.length>50000)fail('Résultat worker trop volumineux.');
  return JSON.parse(serialized);
 }
-export async function runSpecialistTasks(graph,{execute,maxParallel=3}={}){
+export async function runSpecialistTasks(graph,{execute,maxParallel=3,missionMemory=null}={}){
  assertGraph(graph);
  boundedParallelism(maxParallel);
  if(typeof execute!=='function')fail('Exécuteur spécialiste requis.');
@@ -42,7 +42,7 @@ export async function runSpecialistTasks(graph,{execute,maxParallel=3}={}){
     states.set(task.id,transitionTaskState(states.get(task.id),'running'));
     const dependencies=Object.fromEntries(task.dependsOn.map(id=>[id,results[id]]));
     try{
-     const output=safeOutput(await execute({task:{...task,capabilities:[...task.capabilities]},dependencies}));
+     const output=safeOutput(await execute({task:{...task,capabilities:[...task.capabilities]},dependencies,missionMemory}));
      results[task.id]=output;
      states.set(task.id,transitionTaskState(states.get(task.id),'succeeded'));
      completed.push(task.id);

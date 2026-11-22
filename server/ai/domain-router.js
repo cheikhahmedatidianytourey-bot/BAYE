@@ -24,6 +24,12 @@ export const BAYE_DOMAINS = Object.freeze([
 ]);
 
 const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const escapeRegex = value => value.replace(/[.*+?^${}()|[\\]\\]/g, '\\const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();');
+const matchesTerm = (text, term) => {
+  const normalizedTerm = normalize(term).trim();
+  if (!normalizedTerm) return false;
+  return new RegExp('(^|[^a-z0-9])' + escapeRegex(normalizedTerm) + '([^a-z0-9]|$)').test(text);
+};
 
 const DOMAIN_METHODS = {
   mathematics: 'MÉTHODE MATHÉMATIQUE : définis les objets et hypothèses; vérifie les domaines et conditions; déroule les calculs sans sauts injustifiés; distingue preuve générale, exemple numérique, conjecture et calcul fini. Ne présente jamais un problème ouvert comme résolu.',
@@ -53,7 +59,7 @@ export function routeBayeDomain(prompt, kind = 'Texte') {
   const ranked = BAYE_DOMAINS.filter(domain => domain.id !== 'general')
     .map(domain => ({
       domain: domain.id,
-      score: domain.terms.reduce((sum, term) => sum + (text.includes(normalize(term)) ? (['python', 'javascript', 'typescript', 'api', 'programmation', 'programmer', 'code', 'algorithme', 'logiciel', 'base de donnees'].includes(normalize(term)) ? 3 : Math.max(1, normalize(term).split(' ').length)) : 0), 0)
+      score: domain.terms.reduce((sum, term) => sum + (matchesTerm(text, term) ? (['python', 'javascript', 'typescript', 'api', 'programmation', 'programmer', 'code', 'algorithme', 'logiciel', 'base de donnees'].includes(normalize(term)) ? 3 : Math.max(1, normalize(term).split(' ').length)) : 0), 0)
     }))
     .filter(item => item.score > 0)
     .sort((a,b) => b.score-a.score || a.domain.localeCompare(b.domain));
@@ -85,7 +91,7 @@ export function buildDomainSystemPrompt(kind, prompt) {
       route.disciplines.map(item => DOMAIN_METHODS[item.id]),
       'Si la demande traverse plusieurs domaines, signale les disciplines mobilisées et traite leurs interactions au lieu de forcer une seule spécialité.',
       'Ne confonds jamais expertise de rédaction avec preuve scientifique, validation réglementaire, diagnostic médical ou certification professionnelle.'
-    ].join('\\n')
+    ].join('\n')
   };
 }
 

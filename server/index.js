@@ -148,7 +148,9 @@ app.post('/api/generate', generationLimiter, async (req,res)=>{
       if(finishReason!=='length'||part===2)break;
       messages.push({role:'assistant',content:response.piece},{role:'user',content:'Continue exactly where you stopped, without repeating. Complete the answer.'});
     }
-    res.json({result:output,model,core:getCoreInfo(),domain:routed.route,partial:finishReason==='length'});
+    const outputVerification=verifyTextOutput(output,{label:'generation_result',maxLength:100000});
+    if(!outputVerification.passed)return res.status(502).json({error:'BAYE a produit une sortie invalide. Réessaie.',verification:outputVerification});
+    res.json({result:output,model,core:getCoreInfo(),domain:routed.route,partial:finishReason==='length',verification:{passed:true,scope:'structural_only',checks:outputVerification.checks}});
   } catch(err){console.error('BAYE gateway error',err);res.status(502).json({error:'Le moteur IA rencontre un problème. Réessaie plus tard.'});}
 });
 

@@ -5,7 +5,7 @@ import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
 import { buildMissionPlan, getIndependentCoreStatus } from './independent-core.js';
 import { runOwnedRuntime } from './owned-runtime.js';
 import { MemoryEngine } from './memory-engine.js';
-import { runMonitor } from './baye-monitor.js';
+import { runMonitor, getMonitorStatus, getMonitorHistory } from './baye-monitor.js';
 import { createAcademyRouter } from './academy/router.js';
 import { buildDomainSystemPrompt, getBayeCapabilityCatalog } from './ai/domain-router.js';
 import { requestAICompletion, getAIProviderStatus } from './ai/provider-adapter.js';
@@ -53,6 +53,18 @@ app.get('/api/capabilities', (_req,res)=>res.json({ ...getBayeCapabilityCatalog(
 
 
 // BAYE autonomous monitoring: restricted endpoint; secret must be configured in Render.
+app.get('/api/sentinel/status', (req,res)=>{
+  const secret=process.env.BAYE_MONITOR_SECRET;
+  if(!secret)return res.status(503).json({error:'Monitoring access secret not configured'});
+  if(req.get('authorization') !== 'Bearer '+secret)return res.status(401).json({error:'Unauthorized'});
+  res.json(getMonitorStatus());
+});
+app.get('/api/sentinel/history', (req,res)=>{
+  const secret=process.env.BAYE_MONITOR_SECRET;
+  if(!secret)return res.status(503).json({error:'Monitoring access secret not configured'});
+  if(req.get('authorization') !== 'Bearer '+secret)return res.status(401).json({error:'Unauthorized'});
+  res.json({items:getMonitorHistory()});
+});
 app.get('/api/monitor/check', async (req,res)=>{
   const secret=process.env.BAYE_MONITOR_SECRET;
   if(!secret) return res.status(503).json({error:'Monitoring access secret not configured'});

@@ -50,14 +50,29 @@ const DOMAIN_METHODS = {
 
 export function routeBayeDomain(prompt, kind = 'Texte') {
   const text = normalize(String(kind) + ' ' + String(prompt));
-  let best = { domain: 'general', score: 0 };
-  for (const domain of BAYE_DOMAINS) {
-    if (domain.id === 'general') continue;
-    const score = domain.terms.reduce((sum, term) => sum + (text.includes(normalize(term)) ? Math.max(1, normalize(term).split(' ').length) : 0), 0);
-    if (score > best.score) best = { domain: domain.id, score };
-  }
+  const ranked = BAYE_DOMAINS.filter(domain => domain.id !== 'general')
+    .map(domain => ({
+      domain: domain.id,
+      score: domain.terms.reduce((sum, term) => sum + (text.includes(normalize(term)) ? Math.max(1, normalize(term).split(' ').length) : 0), 0)
+    }))
+    .filter(item => item.score > 0)
+    .sort((a,b) => b.score-a.score || a.domain.localeCompare(b.domain));
+  const best = ranked[0] || { domain: 'general', score: 0 };
   const selected = BAYE_DOMAINS.find(item => item.id === best.domain) || BAYE_DOMAINS.at(-1);
-  return { domain: selected.id, label: selected.label, confidence: best.score === 0 ? 'fallback' : best.score >= 3 ? 'strong_keyword_match' : 'keyword_match', score: best.score };
+  // Secondary domains are included only when their score is meaningful relative to the top match.
+  const secondary = ranked.slice(1).filter(item => item.score >= 2 && item.score >= best.score * 0.5);
+  const disciplines = [best, ...secondary].map(item => {
+    const domain = BAYE_DOMAINS.find(d => d.id === item.domain);
+    return { id: item.domain, label: domain.label, score: item.score };
+  });
+  return {
+    domain: selected.id,
+    label: selected.label,
+    confidence: best.score === 0 ? 'fallback' : best.score >= 3 ? 'strong_keyword_match' : 'keyword_match',
+    score: best.score,
+    disciplines,
+    multiDomain: disciplines.length > 1
+  };
 }
 
 export function buildDomainSystemPrompt(kind, prompt) {

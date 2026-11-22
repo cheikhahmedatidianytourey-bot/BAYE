@@ -4,18 +4,30 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install dependencies
-        run: npm install
-      - name: Full npm audit report (diagnostic)
-        run: npm audit --json > audit.json || true
-      - name: Print audit report
-        run: cat audit.json
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run dependency audit (fail on any vulnerability)
+        shell: bash
+        run: |
+          set +e
+          npm audit --audit-level=low --json > audit.json
+          audit_status=$?
+          cat audit.json
+          exit "$audit_status"

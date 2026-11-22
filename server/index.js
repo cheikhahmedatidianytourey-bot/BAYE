@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'node:crypto';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
@@ -41,8 +42,11 @@ app.post('/api/independent-core/plan',generationLimiter,(req,res)=>{try{const mi
 const memoryEngine=new MemoryEngine();
 app.use('/api/memory', (req,res,next)=>{
   const token=process.env.BAYE_MEMORY_TOKEN;
-  if(!token)return res.status(503).json({error:'Memory access token is not configured.'});
-  if(req.get('authorization')!=='Bearer '+token)return res.status(401).json({error:'Unauthorized'});
+  if(typeof token!=='string'||token.length<32)return res.status(503).json({error:'Memory access token is not securely configured.'});
+  const supplied=req.get('authorization')||'';
+  const expected='Bearer '+token;
+  const safeEqual=supplied.length===expected.length&&crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected));
+  if(!safeEqual)return res.status(401).json({error:'Unauthorized'});
   next();
 });
 app.get('/api/memory/status',async(req,res)=>{try{res.json(await memoryEngine.status());}catch(_){res.status(500).json({error:'Memory status unavailable.'});}});

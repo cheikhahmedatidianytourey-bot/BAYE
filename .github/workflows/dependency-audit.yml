@@ -1,0 +1,21 @@
+name: BAYE dependency audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Full npm audit report (diagnostic)
+        run: npm audit --json > audit.json || true
+      - name: Print audit report
+        run: cat audit.json

@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+const MAX_MEMORY_FILE_BYTES = 8 * 1024 * 1024;
+
 export class MemoryEngine {
   constructor({filePath=process.env.BAYE_MEMORY_FILE||'/data/baye-memory.json',maxEntries=500}={}) {
     if(typeof filePath!=='string'||!filePath.trim())throw new TypeError('Memory file path must be a non-empty string.');
@@ -11,6 +13,8 @@ export class MemoryEngine {
   }
   async readAll(){
     try{
+      const stat=await fs.stat(this.filePath);
+      if(stat.size>MAX_MEMORY_FILE_BYTES)throw new Error('Memory file exceeds the configured size limit.');
       const data=JSON.parse(await fs.readFile(this.filePath,'utf8'));
       if(!Array.isArray(data))throw new Error('Memory file format is invalid.');
       return data.filter(e=>e&&typeof e==='object'&&!Array.isArray(e)&&typeof e.id==='string'&&typeof e.text==='string'&&Array.isArray(e.tags)&&e.tags.every(t=>typeof t==='string'));

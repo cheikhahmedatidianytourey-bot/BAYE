@@ -5,6 +5,8 @@ import rateLimit from 'express-rate-limit';
 import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
 import { buildMissionPlan, getIndependentCoreStatus } from './independent-core.js';
 import { runOwnedRuntime } from './owned-runtime.js';
+import { executeSafeTool, getSafeToolCatalog } from './tool-execution.js';
+import { runSafeWorkflow, getWorkflowLimits } from './safe-workflow.js';
 import { MemoryEngine } from './memory-engine.js';
 import { runMonitor, startPeriodicMonitor, getMonitorStatus, getMonitorHistory } from './baye-monitor.js';
 import { createAcademyRouter } from './academy/router.js';
@@ -14,6 +16,8 @@ import { generateCloudflareImage, getMediaProviderStatus } from './ai/media-adap
 import { verifyTextOutput } from './verification-layer.js';
 import { validatePublicImageUrl } from './ai/image-url-validation.js';
 import { readJsonLimited } from './ai/bounded-json.js';
+import { buildOperationalAudit } from './operational-audit.js';
+import { buildStudioInstruction } from './studio-engine.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -36,8 +40,13 @@ const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyH
 const mediaStatusLimiter=rateLimit({windowMs:60_000,max:30,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de vérifications média. Réessaie dans une minute.'}});
 app.get('/', (_req,res)=>res.type('text').send('BAYE AI CORE — Gateway online. Use /health for system status.'));
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo(),independentCore:getIndependentCoreStatus()}));
+app.get('/api/operational-audit',(req,res)=>{const secret=process.env.BAYE_MONITOR_SECRET;if(typeof secret!=='string'||secret.length<32)return res.status(503).json({error:'Audit access secret is not securely configured'});if(!secureBearerMatch(req,secret))return res.status(401).json({error:'Unauthorized'});res.json(buildOperationalAudit());});
 app.get('/api/independent-core/status',(_req,res)=>res.json(getIndependentCoreStatus()));
 app.post('/api/independent-core/runtime',generationLimiter,(req,res)=>{try{res.json(runOwnedRuntime(req.body?.input));}catch(err){res.status(400).json({error:err.message||'Entrée invalide.'});}});
+app.get('/api/independent-core/tools',(_req,res)=>res.json({tools:getSafeToolCatalog(),scope:'allowlisted deterministic local tools; no external side effects'}));
+app.post('/api/independent-core/tools/execute',generationLimiter,(req,res)=>{try{const tool=req.body?.tool;if(typeof tool!=='string')return res.status(400).json({error:'Outil requis.'});const result=executeSafeTool(tool,req.body?.input||{});res.json({result,verification:{passed:true,scope:'deterministic tool checks'}});}catch(err){res.status(400).json({error:err.message||'Entrée invalide.'});}});
+app.get('/api/independent-core/workflow-limits',(_req,res)=>res.json(getWorkflowLimits()));
+app.post('/api/independent-core/workflow',generationLimiter,(req,res)=>{try{res.json(runSafeWorkflow(req.body?.steps));}catch(err){res.status(400).json({error:err.message||'Workflow invalide.'});}});
 app.post('/api/independent-core/plan',generationLimiter,(req,res)=>{try{const mission=req.body?.mission;if(typeof mission!=='string'||mission.trim().length===0)return res.status(400).json({error:'Mission requise.'});if(mission.length>4000)return res.status(400).json({error:'Mission trop longue (maximum 4 000 caractères).'});res.json(buildMissionPlan(mission));}catch(_err){res.status(400).json({error:'Mission invalide.'});}})
 
 function secureBearerMatch(req,secret){
@@ -151,7 +160,7 @@ app.post('/api/generate', generationLimiter, async (req,res)=>{
     const model=process.env.AI_MODEL||'gpt-4o-mini';
     let output='',finishReason='stop',actualModel=model,providerId='primary';
     const routed = buildDomainSystemPrompt(kind, prompt);
-    const messages=[{role:'system',content:routed.systemPrompt},{role:'user',content:prompt}];
+    const messages=[{role:'system',content:routed.systemPrompt+'\\n\\n'+buildStudioInstruction({kind,prompt,context:{configuredAIProvider:Boolean(process.env.AI_API_KEY),configuredMediaProviders:{image:Boolean(process.env.CLOUDFLARE_ACCOUNT_ID&&process.env.CLOUDFLARE_API_TOKEN),video:Boolean(process.env.FAL_KEY)}}})},{role:'user',content:prompt}];
     for(let part=0;part<3;part++){
       const response=await callAI({key,endpoint,model,messages,max_tokens:8192,temperature:0.7});
       output+=response.piece;finishReason=response.finishReason;actualModel=response.model||actualModel;providerId=response.providerId||providerId;
@@ -205,7 +214,7 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
     const falKey=process.env.FAL_KEY;
     if(!falKey) return res.status(503).json({code:'VIDEO_PROVIDER_NOT_CONFIGURED',error:'La génération vidéo nécessite la configuration d’un fournisseur vidéo. Aucun coût ne sera déclenché automatiquement.'});
     if(image_url){
-      if(typeof image_url!=='string'||image_url.length>2048||!validatePublicImageUrl(image_url))return res.status(400).json({error:'L’image doit utiliser une URL HTTPS publique valide, sans port ni adresse locale.'});
+      if(typeof image_url!=='string'||image_url.length>2048||!(await validatePublicImageUrl(image_url)))return res.status(400).json({error:'L’image doit utiliser une URL HTTPS publique valide, sans port ni adresse locale.'});
     }
     const model=falModels.video,payload={prompt:prompt.trim()};if(image_url)payload.image_url=image_url;
     const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});

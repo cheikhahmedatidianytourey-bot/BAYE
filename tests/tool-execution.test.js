@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {executeSafeTool,getSafeToolCatalog} from '../server/tool-execution.js';
+test('calculator respects precedence and parentheses',()=>{assert.equal(executeSafeTool('calculator',{expression:'(2 + 3) * 4 - 6 / 2'}).result,17);});
+test('calculator handles unary signs and modulo',()=>{assert.equal(executeSafeTool('calculator',{expression:'-8 % 3 + 5'}).result,3);});
+test('calculator rejects division by zero',()=>{assert.throws(()=>executeSafeTool('calculator',{expression:'3/0'}),/zéro/);});
+test('calculator rejects injected or unsupported syntax',()=>{assert.throws(()=>executeSafeTool('calculator',{expression:'2+process.exit()'}));assert.throws(()=>executeSafeTool('calculator',{expression:'2 ** 3'}));});
+test('text stats counts words, characters and lines',()=>{assert.deepEqual(executeSafeTool('text_stats',{text:'Bonjour BAYE\nCore'}),{tool:'text_stats',characters:17,words:3,lines:2,verified:true});});
+test('text stats rejects oversized input',()=>{assert.throws(()=>executeSafeTool('text_stats',{text:'x'.repeat(10001)}));});
+test('tool catalog is allowlisted',()=>{assert.deepEqual(getSafeToolCatalog().map(t=>t.id),['calculator','text_stats']);assert.throws(()=>executeSafeTool('shell',{command:'ls'}),/non autorisé/);});

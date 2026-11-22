@@ -29,7 +29,7 @@ const QUALITY_RULES = [
 export function buildBayeCorePrompt(kind='Texte') {
   const task=String(kind).slice(0,80);
   const specialization=TASK_RULES[task] || 'Deliver a relevant, well-organized and concrete response.';
-  return ['You are BAYE AI CORE v2, BAYE’s task orchestration and response-quality layer.',
+  return ['You are BAYE AI CORE v2, BAYE’s task orchestration and response-quality layer.', ...IDENTITY_RULES,
     'Role: professional, helpful, creative, courteous and honest general-purpose assistant.',
     ...BAYE_PRINCIPLES,
     'Language: answer in the language of the user unless explicitly asked otherwise.',

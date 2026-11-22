@@ -16,7 +16,7 @@ export function buildOperationalAudit(env=process.env){
   {id:'video_provider',status:media.video.configured?'configured':'missing',severity:media.video.configured?'info':'warning'},
   {id:'memory_token',status:typeof env.BAYE_MEMORY_TOKEN==='string'&&env.BAYE_MEMORY_TOKEN.length>=32?'configured':'missing_or_weak',severity:typeof env.BAYE_MEMORY_TOKEN==='string'&&env.BAYE_MEMORY_TOKEN.length>=32?'info':'warning'},
   {id:'monitor_secret',status:typeof env.BAYE_MONITOR_SECRET==='string'&&env.BAYE_MONITOR_SECRET.length>=32?'configured':'missing_or_weak',severity:typeof env.BAYE_MONITOR_SECRET==='string'&&env.BAYE_MONITOR_SECRET.length>=32?'info':'warning'},
-  {id:'memory_storage',status:env.BAYE_MEMORY_FILE||'/data/baye-memory.json',severity:'warning',note:'Persistent durability depends on host disk configuration; this audit does not verify mount durability.'},
+  {id:'memory_storage',status:env.BAYE_MEMORY_FILE?'custom_path_configured':'default_path',severity:'warning',note:'Persistent durability depends on host disk configuration; this audit does not verify mount durability.'},
   {id:'monitor',status:monitor.status,severity:monitor.status==='healthy'?'info':'warning'},
   {id:'autonomous_tools',status:'limited_allowlist',severity:'warning',note:'Only deterministic calculator and text statistics tools are available.'},
   {id:'independent_model',status:core.trainedFoundationModel?'trained_model_present':'not_trained',severity:'warning'},

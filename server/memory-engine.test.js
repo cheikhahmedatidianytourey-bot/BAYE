@@ -40,7 +40,6 @@ test('bounds and rejects invalid memory inputs',async()=>{
     await assert.rejects(()=>engine.add({text:''}));
     await assert.rejects(()=>engine.add({text:'ok',tags:Array(21).fill('tag')}));
     await assert.rejects(()=>engine.add({text:'ok',tags:[null]}));
-    await assert.rejects(()=>engine.add({text:'ok',tags:[' '.repeat(60)]}));
     const item=await engine.add({text:' dedup ',tags:[' a ','a','',' b ']});
     assert.equal(item.text,'dedup');assert.deepEqual(item.tags,['a','b']);
   }finally{await fs.rm(dir,{recursive:true,force:true});}

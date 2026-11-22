@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runSafeWorkflow,getWorkflowLimits,verifyWorkflowReceipts} from '../server/safe-workflow.js';
-test('runs multiple allowlisted steps sequentially and verifies receipts',()=>{const r=runSafeWorkflow([{tool:'calculator',input:{expression:'6*7'}},{tool:'text_stats',input:{text:'BAYE Core'}}]);assert.equal(r.status,'completed');assert.equal(r.steps.length,2);assert.equal(r.steps[0].output.result,42);assert.equal(r.steps[1].output.words,2);assert.equal(r.verification.passed,true);assert.equal(r.verification.verified,2);assert.equal(r.steps[0].receipt.length,64);});
+test('runs multiple allowlisted steps sequentially and verifies receipts',()=>{const r=runSafeWorkflow([{tool:'calculator',input:{expression:'6*7'}},{tool:'text_stats',input:{text:'BAYE Core'}}]);assert.equal(r.status,'completed');assert.equal(r.steps.length,2);assert.equal(r.steps[0].output.result,42);assert.equal(r.steps[1].output.words,2);assert.equal(r.verification.passed,true);assert.equal(r.verification.verified,2);assert.equal(r.verification.independent,true);assert.equal(r.steps[0].independentVerification.passed,true);assert.equal(r.steps[0].receipt.length,64);});
 test('receipt verification detects output tampering',()=>{const r=runSafeWorkflow([{tool:'calculator',input:{expression:'6*7'}}]);r.steps[0].output.result=43;assert.equal(verifyWorkflowReceipts(r.steps).passed,false);});
 test('rejects empty and oversized workflows',()=>{
  assert.throws(()=>runSafeWorkflow([]));

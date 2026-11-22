@@ -1,10 +1,8 @@
-// Bounded workflow orchestration with integrity receipts for deterministic tool results.
+// Bounded workflow orchestration with integrity receipts and independent recomputation.
 import {createHash} from 'node:crypto';
 import {executeSafeTool,getSafeToolCatalog} from './tool-execution.js';
-
-function receiptFor(output){
- return createHash('sha256').update(JSON.stringify(output)).digest('hex');
-}
+import {verifyToolResult} from './independent-verifier.js';
+function receiptFor(output){return createHash('sha256').update(JSON.stringify(output)).digest('hex');}
 export function verifyWorkflowReceipts(steps){
  if(!Array.isArray(steps))return {passed:false,verified:0,total:0};
  let verified=0;
@@ -21,11 +19,13 @@ export function runSafeWorkflow(steps){
  for(let i=0;i<steps.length;i++){
   const step=steps[i];
   if(!step||typeof step!=='object'||typeof step.tool!=='string')throw new Error('Étape '+(i+1)+' invalide.');
-  const output=executeSafeTool(step.tool,step.input||{});
-  results.push({step:i+1,tool:step.tool,status:'completed',output,receipt:receiptFor(output)});
+  const input=step.input||{},output=executeSafeTool(step.tool,input);
+  const independent=verifyToolResult(step.tool,input,output);
+  if(!independent.passed)throw new Error('Vérification indépendante échouée à l’étape '+(i+1)+': '+independent.issues.join('; '));
+  results.push({step:i+1,tool:step.tool,status:'completed',input,output,receipt:receiptFor(output),independentVerification:independent});
  }
  const verification=verifyWorkflowReceipts(results);
  if(!verification.passed)throw new Error('Vérification des reçus du workflow échouée.');
- return {workflow:'BAYE Safe Workflow',status:'completed',steps:results,verification:{...verification,scope:'integrity checks over bounded allowlisted deterministic execution'},externalActions:false};
+ return {workflow:'BAYE Safe Workflow',status:'completed',steps:results,verification:{...verification,independent:true,scope:'independent deterministic recomputation for allowlisted tools plus integrity receipts'},externalActions:false};
 }
-export function getWorkflowLimits(){return {maxSteps:5,tools:getSafeToolCatalog().map(t=>t.id),sequential:true,failFast:true,externalActions:false,requiresExplicitInputs:true,integrityReceipts:'SHA-256 per completed tool output'};}
+export function getWorkflowLimits(){return {maxSteps:5,tools:getSafeToolCatalog().map(t=>t.id),sequential:true,failFast:true,externalActions:false,requiresExplicitInputs:true,integrityReceipts:'SHA-256 per completed tool output',independentVerification:'recomputes calculator and text statistics from original inputs'};}

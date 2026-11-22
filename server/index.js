@@ -29,6 +29,7 @@ app.use((req,res,next)=>{
 app.use(express.json({limit:'20kb'}));
 const allowedOrigin = process.env.BAYE_ORIGIN || 'https://baye-app.onrender.com';
 app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Content-Type','Authorization']}));
+app.use('/api/', (req,res,next)=>{res.setHeader('Cache-Control','no-store');next();});
 app.use('/api/', rateLimit({windowMs:60_000, max:30, standardHeaders:true, legacyHeaders:false}));
 const generationLimiter=rateLimit({windowMs:60_000,max:8,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes de génération. Réessaie dans une minute.'}});
 const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes média. Réessaie dans une minute.'}});

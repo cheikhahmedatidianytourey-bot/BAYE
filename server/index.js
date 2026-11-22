@@ -13,6 +13,7 @@ import { requestAICompletion, getAIProviderStatus } from './ai/provider-adapter.
 import { generateCloudflareImage, getMediaProviderStatus } from './ai/media-adapter.js';
 import { verifyTextOutput } from './verification-layer.js';
 import { validatePublicImageUrl } from './ai/image-url-validation.js';
+import { readJsonLimited } from './ai/bounded-json.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -207,8 +208,8 @@ app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
     }
     const model=falModels.video,payload={prompt:prompt.trim()};if(image_url)payload.image_url=image_url;
     const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});
-    if(!upstream.ok){const detail=await upstream.text();console.error('fal video submission error',upstream.status,detail.slice(0,300));const exhausted=upstream.status===403&&/exhausted balance|user is locked/i.test(detail);return res.status(502).json({code:exhausted?'PROVIDER_BALANCE_EXHAUSTED':'MEDIA_PROVIDER_REJECTED',error:exhausted?'Le fournisseur vidéo externe a épuisé son solde. BAYE n’a pas pu lancer cette génération.':'Le fournisseur vidéo externe a refusé cette demande. BAYE n’a pas pu lancer cette génération.'});}
-    const data=await upstream.json();if(typeof data?.request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(data.request_id))return res.status(502).json({error:'Le fournisseur vidéo a retourné un identifiant invalide.'});res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type=video&request_id='+encodeURIComponent(data.request_id)});
+    if(!upstream.ok){console.warn('fal video submission rejected',upstream.status);const exhausted=upstream.status===403;return res.status(502).json({code:exhausted?'PROVIDER_BALANCE_EXHAUSTED':'MEDIA_PROVIDER_REJECTED',error:exhausted?'Le fournisseur vidéo externe a épuisé son solde. BAYE n’a pas pu lancer cette génération.':'Le fournisseur vidéo externe a refusé cette demande. BAYE n’a pas pu lancer cette génération.'});}
+    const data=await readJsonLimited(upstream);if(typeof data?.request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(data.request_id))return res.status(502).json({error:'Le fournisseur vidéo a retourné un identifiant invalide.'});res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type=video&request_id='+encodeURIComponent(data.request_id)});
   }catch(err){
     if(err?.code==='MEDIA_NOT_CONFIGURED')return res.status(503).json({code:err.code,error:err.message});
     if(err?.code==='MEDIA_INVALID_PROMPT')return res.status(400).json({code:err.code,error:err.message});
@@ -232,10 +233,10 @@ app.get('/api/media/status', mediaStatusLimiter, async (req,res)=>{
     const {type,request_id}=req.query;if(type!=='video'||typeof request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(request_id))return res.status(400).json({error:'Paramètres invalides.'});
     const model=falModels.video;const statusRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id+'/status',{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});
     if(!statusRes.ok)return res.status(502).json({error:'Impossible de vérifier la génération.'});
-    const status=await statusRes.json();if(status.status!=='COMPLETED')return res.json({status:status.status});
+    const status=await readJsonLimited(statusRes,1024*1024);if(status.status!=='COMPLETED')return res.json({status:status.status});
     const resultRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id,{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});
     if(!resultRes.ok)return res.status(502).json({error:'Résultat indisponible.'});
-    const result=await resultRes.json();res.json({status:'COMPLETED',result});
+    const result=await readJsonLimited(resultRes);res.json({status:'COMPLETED',result});
   }catch(err){console.error('BAYE media status error',err);res.status(500).json({error:'Erreur interne de vérification.'});}
 });
 // Normalize unexpected errors without exposing stack traces or secrets to clients.

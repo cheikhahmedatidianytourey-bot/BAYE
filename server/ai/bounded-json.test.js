@@ -30,8 +30,7 @@ test('refuses non-streaming JSON bodies to avoid unbounded parsing', async () =>
   let cancelled = false;
   const response = {
     headers: { get: () => null },
-    body: { cancel: async () => { cancelled = true; } },
-    json: async () => { throw new Error('must not parse'); }
+    body: { cancel: async () => { cancelled = true; } }
   };
   await assert.rejects(readJsonLimited(response, 100), /stream is unavailable/);
   assert.equal(cancelled, true);

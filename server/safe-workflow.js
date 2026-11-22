@@ -3,6 +3,12 @@ import {createHash} from 'node:crypto';
 import {executeSafeTool,getSafeToolCatalog} from './tool-execution.js';
 import {verifyToolResult} from './independent-verifier.js';
 function receiptFor(output){return createHash('sha256').update(JSON.stringify(output)).digest('hex');}
+export function executeVerifiedSafeTool(tool,input={}){
+ const output=executeSafeTool(tool,input);
+ const independent=verifyToolResult(tool,input,output);
+ if(!independent.passed)throw new Error('Vérification indépendante échouée: '+independent.issues.join('; '));
+ return {output,independentVerification:independent,receipt:receiptFor(output)};
+}
 export function verifyWorkflowReceipts(steps){
  if(!Array.isArray(steps))return {passed:false,verified:0,total:0};
  let verified=0;
@@ -19,10 +25,9 @@ export function runSafeWorkflow(steps){
  for(let i=0;i<steps.length;i++){
   const step=steps[i];
   if(!step||typeof step!=='object'||typeof step.tool!=='string')throw new Error('Étape '+(i+1)+' invalide.');
-  const input=step.input||{},output=executeSafeTool(step.tool,input);
-  const independent=verifyToolResult(step.tool,input,output);
-  if(!independent.passed)throw new Error('Vérification indépendante échouée à l’étape '+(i+1)+': '+independent.issues.join('; '));
-  results.push({step:i+1,tool:step.tool,status:'completed',input,output,receipt:receiptFor(output),independentVerification:independent});
+  const input=step.input||{};
+  const verified=executeVerifiedSafeTool(step.tool,input);
+  results.push({step:i+1,tool:step.tool,status:'completed',input,output:verified.output,receipt:verified.receipt,independentVerification:verified.independentVerification});
  }
  const verification=verifyWorkflowReceipts(results);
  if(!verification.passed)throw new Error('Vérification des reçus du workflow échouée.');

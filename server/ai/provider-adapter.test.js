@@ -92,3 +92,41 @@ test('provider status exposes configuration booleans but no secrets', () => {
   assert.equal(status.fallbackConfigured, true);
   assert.equal(JSON.stringify(status).includes('secret'), false);
 });
+
+
+test('malformed provider JSON triggers explicit fallback rather than crashing', async () => {
+  const result = await requestAICompletion({
+    primary,
+    env: {
+      AI_FALLBACK_API_KEY: 'fallback-secret',
+      AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1',
+      AI_FALLBACK_MODEL: 'fallback-model'
+    },
+    messages: [],
+    fetchImpl: async (url) => url.startsWith('https://primary.example')
+      ? { ok: true, json: async () => { throw new Error('malformed'); } }
+      : { ok: true, json: async () => ({ choices: [{ message: { content: 'safe fallback' } }] }) }
+  });
+  assert.equal(result.providerId, 'fallback');
+  assert.equal(result.piece, 'safe fallback');
+});
+
+test('timeout or network exception falls through only to explicitly configured provider', async () => {
+  let calls = 0;
+  const result = await requestAICompletion({
+    primary,
+    env: {
+      AI_FALLBACK_API_KEY: 'fallback-secret',
+      AI_FALLBACK_API_BASE_URL: 'https://fallback.example/v1',
+      AI_FALLBACK_MODEL: 'fallback-model'
+    },
+    messages: [],
+    fetchImpl: async (url) => {
+      calls++;
+      if (url.startsWith('https://primary.example')) throw new Error('timeout');
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) };
+    }
+  });
+  assert.equal(calls, 2);
+  assert.equal(result.providerId, 'fallback');
+});

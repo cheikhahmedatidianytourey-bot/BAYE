@@ -47,3 +47,11 @@ test('multidisciplinary prompt includes selected specialist methods', () => {
   assert.match(built.systemPrompt, /MÉTHODE INFORMATIQUE/);
   assert.match(built.systemPrompt, /MÉTHODE INGÉNIERIE/);
 });
+
+test('avoids accidental substring matches for short technical keywords', () => {
+  assert.equal(routeBayeDomain('Le trajet sera rapide demain').domain, 'general');
+});
+
+test('matches technical keywords as words and still handles accents', () => {
+  assert.equal(routeBayeDomain('Écris du code Python').domain, 'computer_science');
+});

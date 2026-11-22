@@ -4,7 +4,7 @@ const DNS_LABEL=/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const BLOCKED_SUFFIXES=['localhost','local','internal','test','invalid','example'];
 
 export function validatePublicImageUrl(value){
-  if(typeof value!=='string'||value.length>2048||/[\s\u0000-\u001f\u007f]/.test(value))return false;
+  if(typeof value!=='string'||value.length>2048||/[\s\\\u0000-\u001f\u007f]/.test(value))return false;
   try{
     const parsed=new URL(value);
     const host=parsed.hostname.toLowerCase().replace(/\.$/,'');

@@ -36,5 +36,5 @@ test('returns a failed task state when a provider call fails',async()=>{
  assert.equal(result.execution.externalActions,false);
 });
 test('requires a provider completion function',async()=>{
- await assert.rejects(()=>runBayeOrchestration({tasks:[task('research')]}),/complétion IA requise/);
+ await assert.rejects(()=>runBayeOrchestration({tasks:[task('research')]}),/complétion IA requis/);
 });

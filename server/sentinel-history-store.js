@@ -26,8 +26,10 @@ export class SentinelHistoryStore {
   }
 
   #validEntry(entry){
-    if(!entry||typeof entry!=='object'||Array.isArray(entry)||Object.keys(entry).some(key=>!['checkedAt','overallOk','results'].includes(key))||typeof entry.checkedAt!=='string'||!Number.isFinite(Date.parse(entry.checkedAt))||typeof entry.overallOk!=='boolean'||!Array.isArray(entry.results))return false;
-    return entry.results.length<=10&&entry.results.every(result=>result&&typeof result==='object'&&!Array.isArray(result)&&Object.keys(result).every(key=>['name','ok'].includes(key))&&typeof result.name==='string'&&result.name.length<=200&&typeof result.ok==='boolean');
+    if(!entry||typeof entry!=='object'||Array.isArray(entry)||Object.keys(entry).some(key=>!['checkedAt','overallOk','results','diagnostics'].includes(key))||typeof entry.checkedAt!=='string'||!Number.isFinite(Date.parse(entry.checkedAt))||typeof entry.overallOk!=='boolean'||!Array.isArray(entry.results))return false;
+    const validResults=entry.results.length<=10&&entry.results.every(result=>result&&typeof result==='object'&&!Array.isArray(result)&&Object.keys(result).every(key=>['name','ok','status','latencyMs','error'].includes(key))&&typeof result.name==='string'&&result.name.length<=200&&typeof result.ok==='boolean'&&(result.status===undefined||result.status===null||Number.isInteger(result.status))&&(result.latencyMs===undefined||result.latencyMs===null||(Number.isFinite(result.latencyMs)&&result.latencyMs>=0))&&(result.error===undefined||result.error===null||(typeof result.error==='string'&&result.error.length<=500)));
+    const validDiagnostics=entry.diagnostics===undefined||(Array.isArray(entry.diagnostics)&&entry.diagnostics.length<=10&&entry.diagnostics.every(item=>item&&typeof item==='object'&&!Array.isArray(item)&&Object.keys(item).every(key=>['target','issue','recommendation'].includes(key))&&typeof item.target==='string'&&item.target.length<=200&&typeof item.issue==='string'&&item.issue.length<=500&&typeof item.recommendation==='string'&&item.recommendation.length<=500));
+    return validResults&&validDiagnostics;
   }
 
   async save(entries) {

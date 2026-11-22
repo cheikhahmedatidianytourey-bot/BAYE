@@ -11,7 +11,7 @@ const domainGuidance={
 };
 export function tokenize(text){
  if(typeof text!=='string')throw new TypeError('Text must be a string');
- return text.toLowerCase().match(/[\\p{L}\\p{N}]+/gu)||[];
+ return text.toLowerCase().match(/[\p{L}\p{N}]+/gu)||[];
 }
 export function runOwnedRuntime(input){
  if(typeof input!=='string'||!input.trim())throw new Error('Input required');

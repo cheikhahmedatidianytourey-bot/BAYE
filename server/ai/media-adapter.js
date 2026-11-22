@@ -1,4 +1,5 @@
 const IMAGE_MODEL='@cf/black-forest-labs/flux-1-schnell';
+const MAX_IMAGE_BASE64_LENGTH=10*1024*1024;
 
 export function getMediaProviderStatus(env=process.env){
   return {
@@ -44,5 +45,6 @@ export async function generateCloudflareImage({prompt,env=process.env,fetchImpl=
   }
   const image=data?.result?.image;
   if(typeof image!=='string'||!image.length){const error=new Error('Le fournisseur n’a retourné aucune image exploitable.');error.code='MEDIA_EMPTY_RESULT';throw error;}
+  if(image.length>MAX_IMAGE_BASE64_LENGTH){const error=new Error('Le résultat image dépasse la taille maximale autorisée par BAYE.');error.code='MEDIA_RESULT_TOO_LARGE';throw error;}
   return {status:'COMPLETED',provider:'cloudflare-workers-ai',model:IMAGE_MODEL,result:{images:[{url:'data:image/jpeg;base64,'+image}]}};
 }

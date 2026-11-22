@@ -68,3 +68,30 @@ test('keeps orchestration usable when semantic reviewer output is malformed',asy
  assert.equal(result.review.semantic.status,'unavailable');
  assert.equal(calls,3);
 });
+
+test('creates a bounded, verifiable mission memory packet for continuity',async()=>{
+ const first=await runBayeOrchestration({
+  missionId:'mission_12345678',
+  tasks:[task('research')],
+  complete:async()=>({piece:'Prior finding: use a staged rollout.'})
+ });
+ assert.equal(first.missionMemory.version,1);
+ assert.equal(first.missionMemory.missionId,'mission_12345678');
+ assert.equal(first.missionMemory.entries.length,1);
+ const secondCalls=[];
+ const second=await runBayeOrchestration({
+  priorMemory:first.missionMemory,
+  tasks:[task('engineering','engineering')],
+  complete:async(messages)=>{secondCalls.push(messages);return {piece:'Engineering follow-up.'};}
+ });
+ assert.equal(second.missionMemory.missionId,'mission_12345678');
+ assert.match(secondCalls[0][1].content,/Prior mission memory/);
+ assert.match(secondCalls[0][1].content,/Prior finding: use a staged rollout/);
+ assert.equal(second.missionMemory.entries.length,2);
+});
+test('rejects altered or cross-mission continuity memory',async()=>{
+ const first=await runBayeOrchestration({missionId:'mission_12345678',tasks:[task('research')],complete:async()=>({piece:'A finding.'})});
+ const altered={...first.missionMemory,entries:[{...first.missionMemory.entries[0],excerpt:'tampered'}]};
+ await assert.rejects(()=>runBayeOrchestration({priorMemory:altered,tasks:[task('next')],complete:async()=>({piece:'ok'})}),/empreinte|mémoire/i);
+ await assert.rejects(()=>runBayeOrchestration({priorMemory:first.missionMemory,missionId:'mission_87654321',tasks:[task('next')],complete:async()=>({piece:'ok'})}),/autre mission/i);
+});

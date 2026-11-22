@@ -65,3 +65,23 @@ test('SENTINEL store validates configured bounds',()=>{
   assert.throws(()=>new SentinelHistoryStore({maxEntries:0}),/positive safe integer/);
   assert.throws(()=>new SentinelHistoryStore({maxEntries:1.5}),/positive safe integer/);
 });
+
+
+test('SENTINEL rejects oversized persisted history before parsing',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'baye-sentinel-large-'));
+  try{
+    const filePath=join(dir,'history.json');
+    const {writeFile}=await import('node:fs/promises');
+    await writeFile(filePath,' '.repeat(2*1024*1024+1));
+    const store=new SentinelHistoryStore({filePath});
+    await assert.rejects(store.load(),/size limit/);
+  }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('SENTINEL rejects unexpected persisted fields',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'baye-sentinel-fields-'));
+  try{
+    const store=new SentinelHistoryStore({filePath:join(dir,'history.json')});
+    await assert.rejects(store.save([{checkedAt:'2026-11-22T10:00:00.000Z',overallOk:true,results:[{name:'backend',ok:true,extra:'unexpected'}]}]),/invalid entry/);
+  }finally{await rm(dir,{recursive:true,force:true});}
+});

@@ -5,8 +5,8 @@ import rateLimit from 'express-rate-limit';
 import { buildBayeCorePrompt, getCoreInfo } from './baye-core.js';
 import { buildMissionPlan, getIndependentCoreStatus } from './independent-core.js';
 import { runOwnedRuntime } from './owned-runtime.js';
-import { executeSafeTool, getSafeToolCatalog } from './tool-execution.js';
-import { runSafeWorkflow, getWorkflowLimits } from './safe-workflow.js';
+import { getSafeToolCatalog } from './tool-execution.js';
+import { executeVerifiedSafeTool, runSafeWorkflow, getWorkflowLimits } from './safe-workflow.js';
 import { MemoryEngine } from './memory-engine.js';
 import { runMonitor, startPeriodicMonitor, getMonitorStatus, getMonitorHistory } from './baye-monitor.js';
 import { createAcademyRouter } from './academy/router.js';
@@ -44,7 +44,7 @@ app.get('/api/operational-audit',(req,res)=>{const secret=process.env.BAYE_MONIT
 app.get('/api/independent-core/status',(_req,res)=>res.json(getIndependentCoreStatus()));
 app.post('/api/independent-core/runtime',generationLimiter,(req,res)=>{try{res.json(runOwnedRuntime(req.body?.input));}catch(err){res.status(400).json({error:err.message||'Entrée invalide.'});}});
 app.get('/api/independent-core/tools',(_req,res)=>res.json({tools:getSafeToolCatalog(),scope:'allowlisted deterministic local tools; no external side effects'}));
-app.post('/api/independent-core/tools/execute',generationLimiter,(req,res)=>{try{const tool=req.body?.tool;if(typeof tool!=='string')return res.status(400).json({error:'Outil requis.'});const result=executeSafeTool(tool,req.body?.input||{});res.json({result,verification:{passed:true,scope:'deterministic tool checks'}});}catch(err){res.status(400).json({error:err.message||'Entrée invalide.'});}});
+app.post('/api/independent-core/tools/execute',generationLimiter,(req,res)=>{try{const tool=req.body?.tool;if(typeof tool!=='string')return res.status(400).json({error:'Outil requis.'});const verified=executeVerifiedSafeTool(tool,req.body?.input||{});res.json({result:verified.output,verification:{...verified.independentVerification,scope:'independent deterministic recomputation'},receipt:verified.receipt,externalActions:false});}catch(err){res.status(400).json({error:err.message||'Entrée invalide.',verification:{passed:false,scope:'independent deterministic recomputation'}});}});
 app.get('/api/independent-core/workflow-limits',(_req,res)=>res.json(getWorkflowLimits()));
 app.post('/api/independent-core/workflow',generationLimiter,(req,res)=>{try{res.json(runSafeWorkflow(req.body?.steps));}catch(err){res.status(400).json({error:err.message||'Workflow invalide.'});}});
 app.post('/api/independent-core/plan',generationLimiter,(req,res)=>{try{const mission=req.body?.mission;if(typeof mission!=='string'||mission.trim().length===0)return res.status(400).json({error:'Mission requise.'});if(mission.length>4000)return res.status(400).json({error:'Mission trop longue (maximum 4 000 caractères).'});res.json(buildMissionPlan(mission));}catch(_err){res.status(400).json({error:'Mission invalide.'});}})

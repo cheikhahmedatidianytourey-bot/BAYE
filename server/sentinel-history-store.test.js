@@ -10,7 +10,7 @@ test('SENTINEL history survives store reconstruction',async()=>{
   const filePath=join(dir,'history.json');
   try {
     const first=new SentinelHistoryStore({filePath,maxEntries:3});
-    const entries=[{checkedAt:'2026-11-22T10:00:00.000Z',overallOk:true},{checkedAt:'2026-11-22T09:55:00.000Z',overallOk:false}];
+    const entries=[{checkedAt:'2026-11-22T10:00:00.000Z',overallOk:true,results:[{name:'backend',ok:true}]},{checkedAt:'2026-11-22T09:55:00.000Z',overallOk:false,results:[{name:'backend',ok:false}]}];
     await first.save(entries);
     const restarted=new SentinelHistoryStore({filePath,maxEntries:3});
     assert.deepEqual(await restarted.load(),entries);

@@ -45,7 +45,8 @@ export async function runSpecialistTasks(graph,{execute,maxParallel=3,missionMem
     await notify(task.id,states.get(task.id));
     const dependencies=Object.fromEntries(task.dependsOn.map(id=>[id,outputs[id]]));
     let output;
-    try{const invocation={task:{...task,capabilities:[...task.capabilities]},dependencies,missionMemory};\n    output=safeOutput(await (coordinationSession?coordinationSession.executeTask({...invocation,execute}):execute(invocation)));}
+    try{const invocation={task:{...task,capabilities:[...task.capabilities]},dependencies,missionMemory};
+    output=safeOutput(await (coordinationSession?coordinationSession.executeTask({...invocation,execute}):execute(invocation)));}
     catch(error){
      const reason=error instanceof Error?error.message:'worker_error';
      states.set(task.id,transitionTaskState(states.get(task.id),'failed',{reason:reason.slice(0,500)||'worker_error'}));anyFailure=true;

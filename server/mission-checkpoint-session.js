@@ -3,7 +3,7 @@ import {createMissionCheckpoint} from './mission-checkpoint.js';
 
 const OWNER=/^[a-f0-9]{64}$/;
 const MISSION=/^[-a-zA-Z0-9_]{1,64}$/;
-const digestGraph=(graph)=>'sha256:'+createHash('sha256').update(JSON.stringify(graph.tasks.map(({id,role,objective,dependsOn})=>({id,role,objective,dependsOn})))).digest('hex');
+const digestGraph=(graph)=>{const canonical={engine:graph.engine,version:graph.version,mode:graph.mode,limits:graph.limits,tasks:graph.tasks.map(({id,role,objective,dependsOn,budget,capabilities,sequence})=>({id,role,objective,dependsOn,budget,capabilities,sequence}))};return 'sha256:'+createHash('sha256').update(JSON.stringify(canonical)).digest('hex');};
 
 export function createDurableMissionCheckpointSession({ledger,ownerId,missionId,graph}={}){
  if(!ledger||typeof ledger.save!=='function')throw new TypeError('Durable mission ledger is required.');

@@ -20,8 +20,9 @@ import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
 import { runBayeOrchestration } from './orchestration-service.js';
 import { PersistentMissionMemoryStore } from './mission-memory-store.js';
-import { requireBayeIdentity } from './identity-auth.js';
+import { requireBayeIdentity, optionalBayeIdentity } from './identity-auth.js';
 import { validateMissionMemory } from './mission-memory.js';
+import { runAuthenticatedOrchestration } from './authenticated-orchestration.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -189,7 +190,7 @@ async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0
 }
 
 // BAYE Specialist Orchestration v1: bounded text-only calls to isolated specialist prompts.
-app.post('/api/orchestration/run', orchestrationLimiter, async (req,res)=>{
+app.post('/api/orchestration/run', orchestrationLimiter, optionalBayeIdentity, async (req,res)=>{
   try{
     const tasks=req.body?.tasks;
     if(!Array.isArray(tasks)||tasks.length<1||tasks.length>5)return res.status(400).json({error:'Fournis de 1 à 5 tâches spécialistes.'});
@@ -197,15 +198,17 @@ app.post('/api/orchestration/run', orchestrationLimiter, async (req,res)=>{
     if(!key)return res.status(503).json({error:'Le fournisseur IA principal n’est pas configuré.'});
     const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
-    const result=await runBayeOrchestration({
-      tasks,
-      maxParallel:2,
-      maxTokens:1200,
-      reviewMode:req.body?.reviewMode==='semantic'?'semantic':'deterministic',
-      priorMemory:req.body?.priorMemory??null,
-      missionId:req.body?.missionId??null,
-      complete:(messages,options)=>callAI({key,endpoint,model,messages,max_tokens:options.max_tokens,temperature:options.temperature})
-    });
+    const missionOptions={tasks,maxParallel:2,maxTokens:1200,reviewMode:req.body?.reviewMode==='semantic'?'semantic':'deterministic',complete:(messages,options)=>callAI({key,endpoint,model,messages,max_tokens:options.max_tokens,temperature:options.temperature})};
+    let result;
+    if(req.bayeIdentity){
+      if(req.body?.priorMemory!=null)return res.status(400).json({error:'Pour une mission authentifiée, la mémoire est chargée exclusivement depuis le stockage serveur.'});
+      try{
+        result=await runAuthenticatedOrchestration({store:persistentMissionMemory,ownerId:req.bayeIdentity.subject,missionId:req.body?.missionId??null,tasks,run:({priorMemory,missionId})=>runBayeOrchestration({...missionOptions,priorMemory,missionId})});
+      }catch(error){
+        if(error?.code==='MISSION_MEMORY_LOAD_FAILED')return res.status(503).json({error:'La mémoire persistante est indisponible. La mission n’a pas été lancée.'});
+        throw error;
+      }
+    }else result=await runBayeOrchestration({...missionOptions,priorMemory:req.body?.priorMemory??null,missionId:req.body?.missionId??null});
     res.status(result.status==='succeeded'?200:502).json(result);
   }catch(err){
     const message=err?.message||'Mission invalide.';

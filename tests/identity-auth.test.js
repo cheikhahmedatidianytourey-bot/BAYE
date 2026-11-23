@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import {verifyBayeIdentityToken} from '../server/identity-auth.js';
+import {verifyBayeIdentityToken,optionalBayeIdentity} from '../server/identity-auth.js';
 
 const secret='test-only-secret-with-at-least-thirty-two-bytes';
 const issuer='https://identity.example.test';
@@ -44,3 +44,9 @@ test('rejects algorithm confusion and incomplete server configuration',()=>{
  assert.throws(()=>verifyBayeIdentityToken('x',{secret:'short',issuer,audience}));
  assert.throws(()=>verifyBayeIdentityToken('x',{secret,issuer:'',audience}));
 });
+
+function responseRecorder(){return {statusCode:200,body:null,status(code){this.statusCode=code;return this;},json(body){this.body=body;return this;}};}
+function withIdentityEnv(values,fn){const keys=['BAYE_IDENTITY_SECRET','BAYE_IDENTITY_ISSUER','BAYE_IDENTITY_AUDIENCE'];const previous=Object.fromEntries(keys.map(key=>[key,process.env[key]]));for(const key of keys){if(values[key]===undefined)delete process.env[key];else process.env[key]=values[key];}try{return fn();}finally{for(const key of keys){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key];}}}
+test('optional identity preserves anonymous requests without credentials',()=>{const req={get:()=>''};const res=responseRecorder();let called=false;optionalBayeIdentity(req,res,()=>{called=true;});assert.equal(called,true);assert.equal(res.statusCode,200);});
+test('optional identity never downgrades invalid bearer token to anonymous',()=>{withIdentityEnv({},()=>{const req={get:()=> 'Bearer invalid'};const res=responseRecorder();let called=false;optionalBayeIdentity(req,res,()=>{called=true;});assert.equal(called,false);assert.equal(res.statusCode,503);});});
+test('optional identity attaches only a verified subject when configured',()=>{const t=token();withIdentityEnv({BAYE_IDENTITY_SECRET:secret,BAYE_IDENTITY_ISSUER:issuer,BAYE_IDENTITY_AUDIENCE:audience},()=>{const req={get:()=> 'Bearer '+t.value};const res=responseRecorder();let called=false;optionalBayeIdentity(req,res,()=>{called=true;});assert.equal(called,true);assert.equal(req.bayeIdentity.subject,'account:user-123456');});});

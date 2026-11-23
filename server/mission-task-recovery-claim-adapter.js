@@ -1,9 +1,11 @@
 import { decideMissionTaskRecovery } from './mission-task-recovery-decision.js';
+import { validateMissionTaskRecoveryInput } from './mission-task-recovery-input-contract.js';
 
 /**
- * Recovery claim adapter. Policy inputs must be read from trusted durable state.
- * The coordination store's atomic claim remains the final race/fencing guard.
- * This adapter does not execute the recovered task.
+ * Recovery claim adapter. Input shape is validated before policy evaluation.
+ * Values must still originate from trusted durable state; validation alone
+ * cannot establish provenance. The atomic store claim is the final race guard.
+ * This adapter does not execute recovered work.
  */
 export function createMissionTaskRecoveryClaimAdapter({ store } = {}) {
   if (!store || typeof store.claim !== 'function') {
@@ -12,22 +14,16 @@ export function createMissionTaskRecoveryClaimAdapter({ store } = {}) {
 
   return Object.freeze({
     async attemptRecovery(input = {}) {
-      const {
-        status, leaseExpired, replaySafe, checkpointValid,
-        sideEffectsUncertain = true, recoveryAttempts = 0,
-        maxRecoveryAttempts = 3, ownerId, missionId, taskId,
-        claimOwner, idempotencyKey, leaseMs
-      } = input;
-
-      const decision = decideMissionTaskRecovery({
-        status, leaseExpired, replaySafe, checkpointValid,
-        sideEffectsUncertain, recoveryAttempts, maxRecoveryAttempts
-      });
+      const normalized = validateMissionTaskRecoveryInput(input);
+      const decision = decideMissionTaskRecovery(normalized);
       if (decision.decision !== 'eligible_for_reclaim') {
         return { ...decision, claim: null };
       }
 
       // The durable store rechecks eligibility atomically; this decision is not authority.
+      const {
+        ownerId, missionId, taskId, claimOwner, idempotencyKey, leaseMs
+      } = normalized;
       const claim = await store.claim({
         ownerId, missionId, taskId, claimOwner, idempotencyKey, leaseMs
       });

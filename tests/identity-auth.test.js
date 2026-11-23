@@ -7,7 +7,7 @@ const secret='test-only-secret-with-at-least-thirty-two-bytes';
 const issuer='https://identity.example.test';
 const audience='baye-api';
 function token(claimOverrides={},header={alg:'HS256',typ:'JWT'}){
- const now=1_800_000_000;
+ const now=Math.floor(Date.now()/1000);
  const encode=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
  const h=encode(header);
  const p=encode({iss:issuer,aud:audience,sub:'account:user-123456',iat:now,exp:now+600,...claimOverrides});
@@ -28,11 +28,12 @@ test('rejects tampering, wrong secret, issuer, audience and subject',()=>{
  }
 });
 test('rejects expired, future-issued, overlong and not-yet-active tokens',()=>{
+ const now=Math.floor(Date.now()/1000);
  for(const claims of [
-  {iat:1_799_000_000,exp:1_799_000_001},
-  {iat:1_800_000_100,exp:1_800_000_200},
-  {iat:1_800_000_000,exp:1_800_004_000},
-  {nbf:1_800_000_100}
+  {iat:now-1_000,exp:now-999},
+  {iat:now+100,exp:now+200},
+  {iat:now,exp:now+4_000},
+  {nbf:now+100}
  ]){
   const bad=token(claims);
   assert.throws(()=>verifyBayeIdentityToken(bad.value,{secret,issuer,audience,now:bad.now}));

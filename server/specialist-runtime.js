@@ -1,4 +1,4 @@
-// Bounded specialist scheduler with preflight graph validation.
+// Bounded specialist scheduler with preflight graph validation and optional durable state hooks.
 import {transitionTaskState,createTaskState} from './orchestration-state.js';
 const fail=(message)=>{throw new Error(message);};
 function assertGraph(graph){
@@ -12,7 +12,6 @@ function assertGraph(graph){
   ids.add(task.id);
  }
  for(const task of graph.tasks)for(const dep of task.dependsOn)if(!ids.has(dep)||dep===task.id)fail('Dépendance de plan invalide.');
- // Kahn preflight: reject cycles before any worker is invoked.
  const indegree=new Map(graph.tasks.map(t=>[t.id,t.dependsOn.length]));
  const downstream=new Map(graph.tasks.map(t=>[t.id,[]]));
  for(const t of graph.tasks)for(const d of t.dependsOn)downstream.get(d).push(t.id);
@@ -27,8 +26,10 @@ function safeOutput(value){
  if(typeof serialized!=='string'||serialized.length>50000)fail('Résultat worker trop volumineux.');
  return JSON.parse(serialized);
 }
-export async function runSpecialistTasks(graph,{execute,maxParallel=3,missionMemory=null}={}){
+export async function runSpecialistTasks(graph,{execute,maxParallel=3,missionMemory=null,onTaskState=null}={}){
  assertGraph(graph);boundedParallelism(maxParallel);if(typeof execute!=='function')fail('Exécuteur spécialiste requis.');
+ if(onTaskState!==null&&typeof onTaskState!=='function')fail('Hook de checkpoint invalide.');
+ const notify=async(taskId,state,extra={})=>{if(onTaskState)await onTaskState({taskId,state,...extra});};
  const tasks=graph.tasks,states=new Map(tasks.map(t=>[t.id,createTaskState(t.id)])),outputs={},finished=new Set();
  let anyFailure=false;const taskResults=[];
  while(finished.size<tasks.length&&!anyFailure){
@@ -38,21 +39,25 @@ export async function runSpecialistTasks(graph,{execute,maxParallel=3,missionMem
    const batch=ready.slice(i,i+maxParallel);
    const settled=await Promise.all(batch.map(async task=>{
     states.set(task.id,transitionTaskState(states.get(task.id),'ready'));
+    await notify(task.id,states.get(task.id));
     states.set(task.id,transitionTaskState(states.get(task.id),'running'));
+    await notify(task.id,states.get(task.id));
     const dependencies=Object.fromEntries(task.dependsOn.map(id=>[id,outputs[id]]));
-    try{
-     const output=safeOutput(await execute({task:{...task,capabilities:[...task.capabilities]},dependencies,missionMemory}));
-     outputs[task.id]=output;states.set(task.id,transitionTaskState(states.get(task.id),'succeeded'));finished.add(task.id);
-     return {taskId:task.id,status:'succeeded',output,state:states.get(task.id)};
-    }catch(error){
+    let output;
+    try{output=safeOutput(await execute({task:{...task,capabilities:[...task.capabilities]},dependencies,missionMemory}));}
+    catch(error){
      const reason=error instanceof Error?error.message:'worker_error';
      states.set(task.id,transitionTaskState(states.get(task.id),'failed',{reason:reason.slice(0,500)||'worker_error'}));anyFailure=true;
+     await notify(task.id,states.get(task.id),{error:reason});
      return {taskId:task.id,status:'failed',error:'Specialist execution failed.',state:states.get(task.id)};
     }
+    outputs[task.id]=output;states.set(task.id,transitionTaskState(states.get(task.id),'succeeded'));finished.add(task.id);
+    await notify(task.id,states.get(task.id),{output});
+    return {taskId:task.id,status:'succeeded',output,state:states.get(task.id)};
    }));
    taskResults.push(...settled);
    if(anyFailure){
-    for(const task of tasks){const state=states.get(task.id);if(state.status==='pending')states.set(task.id,transitionTaskState(state,'cancelled',{reason:'dependency_or_peer_failure'}));}
+    for(const task of tasks){const state=states.get(task.id);if(state.status==='pending'){const cancelled=transitionTaskState(state,'cancelled',{reason:'dependency_or_peer_failure'});states.set(task.id,cancelled);await notify(task.id,cancelled);}}
     return {status:'failed',results:taskResults,taskStates:Object.fromEntries(states),execution:{started:true,toolsInvoked:0,externalActions:false,failed:true}};
    }
   }

@@ -19,6 +19,9 @@ import { readJsonLimited } from './ai/bounded-json.js';
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
 import { runBayeOrchestration } from './orchestration-service.js';
+import { buildExecutionGraph } from './orchestration-kernel.js';
+import { createDurableMissionLedger } from './durable-mission-ledger.js';
+import { createDurableMissionCheckpointSession } from './mission-checkpoint-session.js';
 import { PersistentMissionMemoryStore } from './mission-memory-store.js';
 import { requireBayeIdentity, optionalBayeIdentity } from './identity-auth.js';
 import { validateMissionMemory } from './mission-memory.js';
@@ -78,6 +81,7 @@ app.delete('/api/memory',async(req,res)=>{try{await memoryEngine.clear();res.jso
  
 // Persistent specialist mission memory. Every operation derives its owner from a verified token.
 const persistentMissionMemory=new PersistentMissionMemoryStore();
+const durableMissionLedger=createDurableMissionLedger({directory:process.env.BAYE_MISSION_LEDGER_DIR||'/data/baye-mission-ledger'});
 const missionMemoryLimiter=rateLimit({windowMs:60_000,max:20,standardHeaders:true,legacyHeaders:false});
 app.get('/api/orchestration/memory/:missionId',missionMemoryLimiter,requireBayeIdentity,async(req,res)=>{
  try{
@@ -202,10 +206,18 @@ app.post('/api/orchestration/run', orchestrationLimiter, optionalBayeIdentity, a
     let result;
     if(req.bayeIdentity){
       if(req.body?.priorMemory!=null)return res.status(400).json({error:'Pour une mission authentifiée, la mémoire est chargée exclusivement depuis le stockage serveur.'});
+      const missionId=req.body?.missionId??('mission_'+crypto.randomUUID().replace(/-/g,''));
+      const graph=buildExecutionGraph(tasks,{maxTasks:5,maxDependenciesPerTask:4,maxTotalBudget:10,maxDepth:5});
+      const ownerNamespace=crypto.createHash('sha256').update(req.bayeIdentity.subject).digest('hex');
+      const checkpointSession=createDurableMissionCheckpointSession({ledger:durableMissionLedger,ownerId:ownerNamespace,missionId,graph});
       try{
-        result=await runAuthenticatedOrchestration({store:persistentMissionMemory,ownerId:req.bayeIdentity.subject,missionId:req.body?.missionId??null,tasks,run:({priorMemory,missionId})=>runBayeOrchestration({...missionOptions,priorMemory,missionId})});
+        result=await runAuthenticatedOrchestration({store:persistentMissionMemory,ownerId:req.bayeIdentity.subject,missionId,tasks,run:async({priorMemory,missionId})=>{
+          await checkpointSession.initialized();
+          return runBayeOrchestration({...missionOptions,priorMemory,missionId,checkpointSession});
+        }});
       }catch(error){
         if(error?.code==='MISSION_MEMORY_LOAD_FAILED')return res.status(503).json({error:'La mémoire persistante est indisponible. La mission n’a pas été lancée.'});
+        if(/ledger|checkpoint|révision|revision|journal/i.test(error?.message||''))return res.status(503).json({error:'Le journal durable de mission est indisponible. La mission a été interrompue sans relancer les tâches.'});
         throw error;
       }
     }else result=await runBayeOrchestration({...missionOptions,priorMemory:req.body?.priorMemory??null,missionId:req.body?.missionId??null});

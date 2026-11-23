@@ -18,7 +18,7 @@ export function validateMissionTaskRecoveryInput(input={}){
  const maxRecoveryAttempts=input.maxRecoveryAttempts;
  if(!Number.isSafeInteger(recoveryAttempts)||recoveryAttempts<0)throw new TypeError('recoveryAttempts must be a non-negative integer.');
  if(!Number.isSafeInteger(maxRecoveryAttempts)||maxRecoveryAttempts<1||maxRecoveryAttempts>100)throw new TypeError('maxRecoveryAttempts must be between 1 and 100.');
- const check=(key,value,pattern,message)=>{if(typeof value!=='string'||!pattern.test(value))throw new TypeError(message);return value;};
+ const check=(key,value,pattern,message)=>{if(typeof value!=='string'||!pattern.test(value))throw new TypeError(message);return value;};\n if(!Number.isSafeInteger(input.leaseMs)||input.leaseMs<1000||input.leaseMs>300000)throw new TypeError('leaseMs must be between 1000 and 300000.');
  return Object.freeze({
   status:input.status,
   leaseExpired:requiredBoolean('leaseExpired'),

@@ -90,12 +90,12 @@ export function createPostgresMissionCoordinationStore({pool}={}){
    const leaseMs=requireLease(input.leaseMs);
    const result=await pool.query(`
      UPDATE baye_mission_task_claims
-       SET lease_expires_at=NOW()+($7 * INTERVAL '1 millisecond'),updated_at=NOW()
+       SET lease_expires_at=NOW()+($6 * INTERVAL '1 millisecond'),updated_at=NOW()
        WHERE owner_id=$1 AND mission_id=$2 AND task_id=$3
          AND claim_owner=$4 AND fencing_token=$5::BIGINT
          AND status='claimed' AND lease_expires_at>NOW()
        RETURNING owner_id,mission_id,task_id,claim_owner,idempotency_key,lease_expires_at,fencing_token
-   `,[ownerId,missionId,taskId,claimOwner,fencingToken, null,leaseMs]);
+   `,[ownerId,missionId,taskId,claimOwner,fencingToken,leaseMs]);
    return claimRow(result.rows?.[0]??null);
   },
   async settle(input={}){

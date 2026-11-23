@@ -28,7 +28,8 @@ function safeOutput(value){
 }
 export async function runSpecialistTasks(graph,{execute,maxParallel=3,missionMemory=null,onTaskState=null,coordinationSession=null}={}){
  assertGraph(graph);boundedParallelism(maxParallel);if(typeof execute!=='function')fail('Exécuteur spécialiste requis.');
- if(onTaskState!==null&&typeof onTaskState!=='function')fail('Hook de checkpoint invalide.');\n if(coordinationSession!==null&&typeof coordinationSession.executeTask!=='function')fail('Hook de coordination invalide.');
+ if(onTaskState!==null&&typeof onTaskState!=='function')fail('Hook de checkpoint invalide.');
+ if(coordinationSession!==null&&typeof coordinationSession.executeTask!=='function')fail('Hook de coordination invalide.');
  const notify=async(taskId,state,extra={})=>{if(onTaskState)await onTaskState({taskId,state,...extra});};
  const tasks=graph.tasks,states=new Map(tasks.map(t=>[t.id,createTaskState(t.id)])),outputs={},finished=new Set();
  let anyFailure=false;const taskResults=[];

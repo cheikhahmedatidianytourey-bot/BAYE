@@ -22,7 +22,7 @@ The application must supply a shared PostgreSQL pool and apply the schema migrat
 A fencing token protects BAYE's coordination state; it cannot by itself prevent a stale worker from completing an arbitrary external side effect. External providers must accept the same stable idempotency key, or the task must stop in `needs_review` for reconciliation. BAYE must not claim generic exactly-once execution.
 
 ## Verification scope
-Unit tests verify input bounds, SQL shape, conditional update predicates, fencing-token propagation, and fail-closed null results with a PostgreSQL-compatible test double. They do **not** prove actual PostgreSQL concurrency, transaction behavior, crash recovery, or production readiness. Those require integration tests against a real PostgreSQL instance and a separate runtime-wiring review.
+Unit tests verify input bounds and SQL contract using a test double. CI also starts PostgreSQL 16 and runs a real integration test for simultaneous claims, conflicting idempotency keys, explicit retryable settlement, fencing-token increment, and stale-worker rejection. This verifies those scenarios against PostgreSQL in CI, but not production workload, crash recovery, Render runtime wiring, or external side-effect behavior.
 
 ## Not included
 - No automatic retry, replay, or mission resume.

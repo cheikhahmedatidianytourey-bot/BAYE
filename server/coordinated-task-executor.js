@@ -1,7 +1,7 @@
 /**
  * Conservative execution adapter around the coordination claim store.
- * Periodically renews a lease during execution and fails closed on lease loss.
- * Worker cancellation is cooperative and is not guaranteed by this adapter.
+ * Periodically renews a lease and aborts cooperative work on lease loss.
+ * AbortSignal cannot stop work that ignores cancellation or undo external effects.
  */
 export function createCoordinatedTaskExecutor({store,ownerId,missionId,claimOwner,leaseMs=30_000,renewEveryMs=Math.floor(leaseMs/3)}={}){
  if(!store||typeof store.claim!=='function'||typeof store.settle!=='function'||typeof store.renew!=='function')throw new TypeError('Coordination store with claim, renew and settle is required.');
@@ -15,11 +15,17 @@ export function createCoordinatedTaskExecutor({store,ownerId,missionId,claimOwne
    const claim=await store.claim({ownerId,missionId,taskId:task.id,claimOwner,idempotencyKey,leaseMs});
    if(!claim)throw new Error('Task coordination claim denied; execution blocked.');
    let timer=null,renewalStopped=false,renewalInFlight=false,leaseLostError=null;
+   const controller=new AbortController();
    let rejectLeaseLost;
    const leaseLost=new Promise((_,reject)=>{rejectLeaseLost=reject;});
-   // Attach a handler immediately to avoid an unhandled rejection when execution completes first.
    leaseLost.catch(()=>{});
-   const loseLease=(error)=>{if(!leaseLostError){leaseLostError=error instanceof Error?error:new Error('Coordination lease lost.');rejectLeaseLost(leaseLostError);}};
+   const loseLease=(error)=>{
+    if(!leaseLostError){
+     leaseLostError=error instanceof Error?error:new Error('Coordination lease lost.');
+     controller.abort(leaseLostError);
+     rejectLeaseLost(leaseLostError);
+    }
+   };
    const scheduleRenewal=()=>{
     if(renewalStopped||leaseLostError)return;
     timer=setTimeout(async()=>{
@@ -27,7 +33,7 @@ export function createCoordinatedTaskExecutor({store,ownerId,missionId,claimOwne
      renewalInFlight=true;
      try{
       const renewed=await store.renew({...claim,leaseMs});
-      if(!renewed)loseLease(new Error('Coordination lease renewal refused; execution is no longer authorized.'));
+      if(!renewed)loseLease(new Error('Coordination lease renewal refused; cooperative execution cancellation requested.'));
      }catch(error){loseLease(error);}
      finally{renewalInFlight=false;if(!renewalStopped&&!leaseLostError)scheduleRenewal();}
     },renewEveryMs);
@@ -35,7 +41,7 @@ export function createCoordinatedTaskExecutor({store,ownerId,missionId,claimOwne
    };
    scheduleRenewal();
    try{
-    const work=Promise.resolve().then(()=>execute({task,dependencies,missionMemory}));
+    const work=Promise.resolve().then(()=>execute({task,dependencies,missionMemory,signal:controller.signal}));
     const output=await Promise.race([work,leaseLost]);
     if(leaseLostError)throw leaseLostError;
     renewalStopped=true;if(timer)clearTimeout(timer);
@@ -44,6 +50,7 @@ export function createCoordinatedTaskExecutor({store,ownerId,missionId,claimOwne
     return output;
    }catch(error){
     renewalStopped=true;if(timer)clearTimeout(timer);
+    if(!controller.signal.aborted)controller.abort(error);
     try{await store.settle({...claim,status:'needs_review'});}catch(_settleError){}
     throw error;
    }finally{

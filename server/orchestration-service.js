@@ -40,14 +40,15 @@ async function runSemanticReview({results,complete,maxTokens=600}){
   return {status:'completed',summary:parsed.summary.slice(0,2000),findings,recommendedFollowUp:parsed.recommendedFollowUp.filter(x=>typeof x==='string').slice(0,10).map(x=>x.slice(0,500)),model:response?.model||null,independentFactVerification:false,notice:'Analyse de cohérence entre rapports uniquement. Les désaccords signalés ne déterminent pas quelle affirmation est vraie.'};
  }catch(_error){return unavailableReview('Semantic review could not be completed or parsed.');}
 }
-export async function runBayeOrchestration({tasks,complete,maxParallel=2,maxTokens=1200,reviewMode='deterministic',priorMemory=null,missionId=null}={}){
+export async function runBayeOrchestration({tasks,complete,maxParallel=2,maxTokens=1200,reviewMode='deterministic',priorMemory=null,missionId=null,checkpointSession=null}={}){
  const graph=buildExecutionGraph(tasks,SERVICE_LIMITS);
  const validatedMemory=priorMemory==null?null:validateMissionMemory(priorMemory);
  if(missionId!==null&&(typeof missionId!=='string'||! /^[a-zA-Z0-9_-]{8,100}$/.test(missionId)))throw new Error('Identifiant de mission invalide.');
  if(validatedMemory&&missionId&&validatedMemory.missionId!==missionId)throw new Error('La mémoire fournie appartient à une autre mission.');
  const activeMissionId=validatedMemory?.missionId||missionId||undefined;
  const execute=createSpecialistAIExecutor({complete,maxTokens});
- const runtime=await runSpecialistTasks(graph,{execute,maxParallel,missionMemory:validatedMemory});
+ const runtime=await runSpecialistTasks(graph,{execute,maxParallel,missionMemory:validatedMemory,onTaskState:checkpointSession?.onTaskState??null});
+ const checkpoint=checkpointSession?await checkpointSession.finish(runtime.status==='succeeded'?'succeeded':'failed'):null;
  const missionMemory=runtime.status==='succeeded'?createMissionMemory({missionId:activeMissionId,previous:validatedMemory,results:runtime.results}):validatedMemory;
  const deterministicReview=reviewOrchestrationResults({results:runtime.results,taskStates:runtime.taskStates});
  const semanticReview=reviewMode==='semantic'&&runtime.status==='succeeded'
@@ -63,6 +64,7 @@ export async function runBayeOrchestration({tasks,complete,maxParallel=2,maxToke
   missionMemory,
   review:{...deterministicReview,semantic:semanticReview},
   execution:{started:runtime.execution.started,toolsInvoked:runtime.execution.toolsInvoked,externalActions:runtime.execution.externalActions,failed:runtime.execution.failed,parallelism:maxParallel},
+  checkpoint:checkpoint?{status:'persisted',missionId:checkpointSession.missionId,revision:checkpoint.revision,sequence:checkpoint.sequence,graphDigest:checkpoint.graphDigest}:null,
   safety:{mode:'text_only_specialist_inference',toolsEnabled:false,externalActionsEnabled:false,independentFactVerification:false}
  };
 }

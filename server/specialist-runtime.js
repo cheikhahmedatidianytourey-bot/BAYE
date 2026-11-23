@@ -26,9 +26,10 @@ function safeOutput(value){
  if(typeof serialized!=='string'||serialized.length>50000)fail('Résultat worker trop volumineux.');
  return JSON.parse(serialized);
 }
-export async function runSpecialistTasks(graph,{execute,maxParallel=3,missionMemory=null,onTaskState=null}={}){
+export async function runSpecialistTasks(graph,{execute,maxParallel=3,missionMemory=null,onTaskState=null,coordinationSession=null}={}){
  assertGraph(graph);boundedParallelism(maxParallel);if(typeof execute!=='function')fail('Exécuteur spécialiste requis.');
  if(onTaskState!==null&&typeof onTaskState!=='function')fail('Hook de checkpoint invalide.');
+ if(coordinationSession!==null&&typeof coordinationSession.executeTask!=='function')fail('Hook de coordination invalide.');
  const notify=async(taskId,state,extra={})=>{if(onTaskState)await onTaskState({taskId,state,...extra});};
  const tasks=graph.tasks,states=new Map(tasks.map(t=>[t.id,createTaskState(t.id)])),outputs={},finished=new Set();
  let anyFailure=false;const taskResults=[];
@@ -44,7 +45,8 @@ export async function runSpecialistTasks(graph,{execute,maxParallel=3,missionMem
     await notify(task.id,states.get(task.id));
     const dependencies=Object.fromEntries(task.dependsOn.map(id=>[id,outputs[id]]));
     let output;
-    try{output=safeOutput(await execute({task:{...task,capabilities:[...task.capabilities]},dependencies,missionMemory}));}
+    try{const invocation={task:{...task,capabilities:[...task.capabilities]},dependencies,missionMemory};
+    output=safeOutput(await (coordinationSession?coordinationSession.executeTask({...invocation,execute}):execute(invocation)));}
     catch(error){
      const reason=error instanceof Error?error.message:'worker_error';
      states.set(task.id,transitionTaskState(states.get(task.id),'failed',{reason:reason.slice(0,500)||'worker_error'}));anyFailure=true;

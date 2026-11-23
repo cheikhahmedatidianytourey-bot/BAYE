@@ -3,14 +3,14 @@ import {createMissionCheckpoint} from './mission-checkpoint.js';
 
 const OWNER=/^[a-f0-9]{64}$/;
 const MISSION=/^[-a-zA-Z0-9_]{1,64}$/;
-const digestGraph=(graph)=>{const canonical={engine:graph.engine,version:graph.version,mode:graph.mode,limits:graph.limits,tasks:graph.tasks.map(({id,role,objective,dependsOn,budget,capabilities,sequence})=>({id,role,objective,dependsOn,budget,capabilities,sequence}))};return 'sha256:'+createHash('sha256').update(JSON.stringify(canonical)).digest('hex');};
+export const digestMissionGraph=(graph)=>{const canonical={engine:graph.engine,version:graph.version,mode:graph.mode,limits:graph.limits,tasks:graph.tasks.map(({id,role,objective,dependsOn,budget,capabilities,sequence})=>({id,role,objective,dependsOn,budget,capabilities,sequence}))};return 'sha256:'+createHash('sha256').update(JSON.stringify(canonical)).digest('hex');};
 
 export function createDurableMissionCheckpointSession({ledger,ownerId,missionId,graph}={}){
  if(!ledger||typeof ledger.save!=='function')throw new TypeError('Durable mission ledger is required.');
  if(typeof ownerId!=='string'||!OWNER.test(ownerId))throw new TypeError('Hashed owner namespace is required.');
  if(typeof missionId!=='string'||!MISSION.test(missionId))throw new TypeError('Mission identifier is invalid.');
  if(!graph||!Array.isArray(graph.tasks)||graph.tasks.length<1||graph.tasks.length>12)throw new TypeError('Validated mission graph is required.');
- const graphDigest=digestGraph(graph);
+ const graphDigest=digestMissionGraph(graph);
  const tasks=Object.fromEntries(graph.tasks.map(task=>[task.id,{status:'pending',attempt:0,history:[]}]));
  let revision=-1,queue=Promise.resolve(),status='running';
  const persist=async()=>{

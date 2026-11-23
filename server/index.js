@@ -26,6 +26,7 @@ import { PersistentMissionMemoryStore } from './mission-memory-store.js';
 import { requireBayeIdentity, optionalBayeIdentity } from './identity-auth.js';
 import { validateMissionMemory } from './mission-memory.js';
 import { runAuthenticatedOrchestration } from './authenticated-orchestration.js';
+import { inspectMissionRecovery } from './mission-recovery-service.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -192,6 +193,23 @@ async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0
     temperature
   });
 }
+
+// Read-only recovery preview for an authenticated durable mission.
+app.post('/api/orchestration/:missionId/recovery-preview',missionMemoryLimiter,requireBayeIdentity,async(req,res)=>{
+ try{
+  const tasks=req.body?.tasks;
+  if(!Array.isArray(tasks)||tasks.length<1||tasks.length>5)return res.status(400).json({error:'Fournis de 1 à 5 tâches pour vérifier cette mission.'});
+  const graph=buildExecutionGraph(tasks,{maxTasks:5,maxDependenciesPerTask:4,maxTotalBudget:10,maxDepth:5});
+  const ownerId=crypto.createHash('sha256').update(req.bayeIdentity.subject).digest('hex');
+  const plan=await inspectMissionRecovery({ledger:durableMissionLedger,ownerId,missionId:req.params.missionId,graph});
+  if(!plan)return res.status(404).json({error:'Checkpoint durable introuvable pour cette mission.'});
+  res.json(plan);
+ }catch(err){
+  const message=err?.message||'Recovery preview unavailable.';
+  const invalid=/tâche|graphe|budget|dépendance|rôle|objectif|limite|configuration|profondeur|identifiant|mission/i.test(message);
+  res.status(invalid?400:503).json({error:invalid?message:'Le journal durable de mission est temporairement indisponible.'});
+ }
+});
 
 // BAYE Specialist Orchestration v1: bounded text-only calls to isolated specialist prompts.
 app.post('/api/orchestration/run', orchestrationLimiter, optionalBayeIdentity, async (req,res)=>{

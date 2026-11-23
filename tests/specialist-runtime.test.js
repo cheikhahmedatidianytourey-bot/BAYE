@@ -61,3 +61,17 @@ test('marks malformed or oversized worker outputs failed and does not expose the
  assert.equal(oversized.results[0].status,'failed');
  assert.equal(Object.hasOwn(oversized.results[0],'output'),false);
 });
+
+test('rejects cycles and malformed task contracts before invoking workers',async()=>{
+ let invoked=0;const execute=async()=>{invoked++;return {ok:true};};
+ await assert.rejects(()=>runSpecialistTasks(graph([task('a',['b']),task('b',['a'])]),{execute}),/cyclique/);
+ await assert.rejects(()=>runSpecialistTasks(graph([{id:'x',dependsOn:[]}]),{execute}),/Tâche de plan invalide/);
+ await assert.rejects(()=>runSpecialistTasks(graph([{...task('dup'),dependsOn:['dup','dup']}]),{execute}),/dupliquées/);
+ await assert.rejects(()=>runSpecialistTasks(graph([{...task('caps'),capabilities:['x'.repeat(65)]}]),{execute}),/Limites/);
+ assert.equal(invoked,0);
+});
+test('rejects dependency cycles before any specialist starts',async()=>{
+ let invoked=0;const execute=async()=>{invoked++;return {};};
+ await assert.rejects(()=>runSpecialistTasks(graph([task('a',['b']),task('b',['c']),task('c',['a'])]),{execute}),/cyclique/);
+ assert.equal(invoked,0);
+});

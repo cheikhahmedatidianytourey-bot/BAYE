@@ -12,6 +12,10 @@ test('PostgreSQL integration: atomic competing claims, reclaim and fencing', {sk
  try{
   await store.ensureSchema();
   await pool.query('DELETE FROM baye_mission_task_claims WHERE owner_id=$1 AND mission_id=$2',[ownerId,missionId]);
+  await pool.query('DELETE FROM baye_mission_task_recovery_evidence WHERE owner_id=$1 AND mission_id=$2',[ownerId,missionId]);
+  await pool.query("INSERT INTO baye_mission_task_recovery_evidence (owner_id,mission_id,task_id,replay_safe,checkpoint_valid,side_effects_uncertain,recovery_attempts,max_recovery_attempts,evidence_revision) VALUES ($1,$2,$3,true,true,false,0,3,1)",[ownerId,missionId,taskId]);
+  const durableEvidence=await store.inspectRecoveryEvidence({ownerId,missionId,taskId});
+  assert.deepEqual(durableEvidence,{replaySafe:true,checkpointValid:true,sideEffectsUncertain:false,recoveryAttempts:0,maxRecoveryAttempts:3,evidenceRevision:'1'});
   const claims=await Promise.all([
    store.claim({ownerId,missionId,taskId,claimOwner:'worker-a',idempotencyKey:key,leaseMs:10_000}),
    store.claim({ownerId,missionId,taskId,claimOwner:'worker-b',idempotencyKey:key,leaseMs:10_000})
@@ -33,6 +37,7 @@ test('PostgreSQL integration: atomic competing claims, reclaim and fencing', {sk
   assert.equal((await store.inspect({ownerId,missionId,taskId})).claimOwner,'worker-c');
  }finally{
   await pool.query('DELETE FROM baye_mission_task_claims WHERE owner_id=$1 AND mission_id=$2',[ownerId,missionId]);
+  await pool.query('DELETE FROM baye_mission_task_recovery_evidence WHERE owner_id=$1 AND mission_id=$2',[ownerId,missionId]);
   await pool.end();
  }
 });

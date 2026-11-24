@@ -20,6 +20,23 @@ test('exposes explicit idempotent schema initialization',async()=>{
  assert.match(pool.calls[0].sql,/PRIMARY KEY \(owner_id, mission_id, task_id\)/);
 });
 
+test('schema includes a durable evidence table with bounded retry metadata',async()=>{
+ const pool=fakePool();const store=createPostgresMissionCoordinationStore({pool});
+ await store.ensureSchema();
+ assert.match(pool.calls[0].sql,/CREATE TABLE IF NOT EXISTS baye_mission_task_recovery_evidence/);
+ assert.match(pool.calls[0].sql,/max_recovery_attempts BETWEEN 1 AND 100/);
+ assert.match(pool.calls[0].sql,/evidence_revision BIGINT NOT NULL/);
+});
+
+test('inspectRecoveryEvidence reads only persisted safety metadata',async()=>{
+ const pool=fakePool([[{replay_safe:true,checkpoint_valid:true,side_effects_uncertain:false,recovery_attempts:2,max_recovery_attempts:5,evidence_revision:'9'}]]);
+ const store=createPostgresMissionCoordinationStore({pool});
+ const evidence=await store.inspectRecoveryEvidence(base);
+ assert.deepEqual(evidence,{replaySafe:true,checkpointValid:true,sideEffectsUncertain:false,recoveryAttempts:2,maxRecoveryAttempts:5,evidenceRevision:'9'});
+ assert.match(pool.calls[0].sql,/FROM baye_mission_task_recovery_evidence/);
+ assert.equal(pool.calls[0].values[0],base.ownerId);
+});
+
 test('claim uses a single conditional upsert and returns the fencing token',async()=>{
  const pool=fakePool([[{owner_id:base.ownerId,mission_id:base.missionId,task_id:base.taskId,claim_owner:'worker-a',idempotency_key:base.idempotencyKey,lease_expires_at:new Date(),fencing_token:'7'}]]);
  const store=createPostgresMissionCoordinationStore({pool});

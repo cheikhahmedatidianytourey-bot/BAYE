@@ -2,34 +2,50 @@ import { decideMissionTaskRecovery } from './mission-task-recovery-decision.js';
 import { validateMissionTaskRecoveryInput } from './mission-task-recovery-input-contract.js';
 
 /**
- * Recovery claim adapter. Input shape is validated before policy evaluation.
- * Values must still originate from trusted durable state; validation alone
- * cannot establish provenance. The atomic store claim is the final race guard.
- * This adapter does not execute recovered work.
+ * Recovery adapter derives claim status and lease expiry from the PostgreSQL
+ * snapshot, then reclaims only that exact fencing generation with compare-and-swap.
+ * Replay/checkpoint/side-effect evidence must still come from trusted durable data.
+ * This adapter never executes recovered work.
  */
 export function createMissionTaskRecoveryClaimAdapter({ store } = {}) {
-  if (!store || typeof store.claim !== 'function') {
-    throw new TypeError('A coordination store with claim() is required.');
+  if (!store || typeof store.inspect !== 'function' || typeof store.reclaim !== 'function') {
+    throw new TypeError('A coordination store with inspect() and reclaim() is required.');
   }
 
   return Object.freeze({
     async attemptRecovery(input = {}) {
       const normalized = validateMissionTaskRecoveryInput(input);
-      const decision = decideMissionTaskRecovery(normalized);
+      const identity = {
+        ownerId: normalized.ownerId,
+        missionId: normalized.missionId,
+        taskId: normalized.taskId
+      };
+      const snapshot = await store.inspect(identity);
+      if (!snapshot) {
+        return { decision: 'claim_denied', reason: 'claim_snapshot_missing', claim: null };
+      }
+
+      // Never trust caller-supplied status or lease expiry over the DB snapshot.
+      const decision = decideMissionTaskRecovery({
+        ...normalized,
+        status: snapshot.status,
+        leaseExpired: snapshot.leaseExpired
+      });
       if (decision.decision !== 'eligible_for_reclaim') {
         return { ...decision, claim: null };
       }
 
-      // The durable store rechecks eligibility atomically; this decision is not authority.
-      const {
-        ownerId, missionId, taskId, claimOwner, idempotencyKey, leaseMs
-      } = normalized;
-      const claim = await store.claim({
-        ownerId, missionId, taskId, claimOwner, idempotencyKey, leaseMs
+      // The fencing token binds the atomic UPDATE to the exact inspected generation.
+      const claim = await store.reclaim({
+        ...identity,
+        claimOwner: normalized.claimOwner,
+        idempotencyKey: normalized.idempotencyKey,
+        leaseMs: normalized.leaseMs,
+        fencingToken: snapshot.fencingToken
       });
       return claim
-        ? { decision: 'claimed', reason: 'atomic_claim_acquired', claim }
-        : { decision: 'claim_denied', reason: 'atomic_claim_not_acquired', claim: null };
+        ? { decision: 'claimed', reason: 'snapshot_bound_atomic_reclaim', claim }
+        : { decision: 'claim_denied', reason: 'snapshot_changed_or_reclaim_denied', claim: null };
     }
   });
 }

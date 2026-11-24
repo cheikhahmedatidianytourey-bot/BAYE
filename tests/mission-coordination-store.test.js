@@ -38,6 +38,34 @@ test('a competing or duplicate claim is represented by null when the atomic upda
  assert.equal(await store.claim(base),null);
 });
 
+test('inspect returns database-derived lease expiry and metadata only',async()=>{
+ const pool=fakePool([[{owner_id:base.ownerId,mission_id:base.missionId,task_id:base.taskId,claim_owner:'worker-a',idempotency_key:base.idempotencyKey,lease_expires_at:new Date(),fencing_token:'1',status:'claimed',lease_expired:true}]]);
+ const store=createPostgresMissionCoordinationStore({pool});
+ const result=await store.inspect(base);
+ assert.equal(result.status,'claimed');
+ assert.equal(result.leaseExpired,true);
+ assert.equal(result.fencingToken,'1');
+ assert.equal(Object.hasOwn(result,'output'),false);
+ assert.match(pool.calls[0].sql,/lease_expires_at<=NOW\(\)\) AS lease_expired/);
+});
+
+test('reclaim is a compare-and-swap against the inspected fencing generation',async()=>{
+ const pool=fakePool([[{owner_id:base.ownerId,mission_id:base.missionId,task_id:base.taskId,claim_owner:'worker-b',idempotency_key:base.idempotencyKey,lease_expires_at:new Date(),fencing_token:'8'}]]);
+ const store=createPostgresMissionCoordinationStore({pool});
+ const claim=await store.reclaim({...base,claimOwner:'worker-b',fencingToken:'7'});
+ assert.equal(claim.fencingToken,'8');
+ assert.match(pool.calls[0].sql,/fencing_token=\$6::BIGINT/);
+ assert.match(pool.calls[0].sql,/idempotency_key=\$5/);
+ assert.match(pool.calls[0].sql,/lease_expires_at<=NOW\(\)/);
+ assert.equal(pool.calls[0].values[5],'7');
+});
+
+test('reclaim rejects malformed fencing tokens before SQL',async()=>{
+ const pool=fakePool();const store=createPostgresMissionCoordinationStore({pool});
+ await assert.rejects(()=>store.reclaim({...base,fencingToken:'0'}),/Fencing token/);
+ assert.equal(pool.calls.length,0);
+});
+
 test('renew and settle require the current worker and fencing token',async()=>{
  const pool=fakePool([[],[{owner_id:base.ownerId,mission_id:base.missionId,task_id:base.taskId,claim_owner:'worker-a',idempotency_key:base.idempotencyKey,lease_expires_at:new Date(),fencing_token:'7',status:'completed'}]]);
  const store=createPostgresMissionCoordinationStore({pool});
@@ -55,13 +83,4 @@ test('rejects invalid identifiers, unstable idempotency keys, leases and termina
  await assert.rejects(()=>store.claim({...base,leaseMs:999}),/Lease duration/);
  await assert.rejects(()=>store.settle({...base,fencingToken:'1',status:'running'}),/terminal claim status/);
  assert.equal(pool.calls.length,0);
-});
-
-test('inspect returns metadata only and does not expose task outputs',async()=>{
- const pool=fakePool([[{owner_id:base.ownerId,mission_id:base.missionId,task_id:base.taskId,claim_owner:'worker-a',idempotency_key:base.idempotencyKey,lease_expires_at:new Date(),fencing_token:'1',status:'claimed'}]]);
- const store=createPostgresMissionCoordinationStore({pool});
- const result=await store.inspect(base);
- assert.equal(result.status,'claimed');
- assert.equal(Object.hasOwn(result,'output'),false);
- assert.match(pool.calls[0].sql,/SELECT owner_id,mission_id,task_id/);
 });

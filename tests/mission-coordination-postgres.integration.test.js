@@ -22,9 +22,12 @@ test('PostgreSQL integration: atomic competing claims, reclaim and fencing', {sk
   assert.equal(await store.claim({ownerId,missionId,taskId,claimOwner:'worker-c',idempotencyKey:'other_key_v2',leaseMs:10_000}),null,'different idempotency key cannot replace active claim');
   const settled=await store.settle({...winner,status:'retryable'});
   assert.equal(settled.status,'retryable');
-  const reclaimed=await store.claim({ownerId,missionId,taskId,claimOwner:'worker-c',idempotencyKey:key,leaseMs:10_000});
+  const snapshot=await store.inspect({ownerId,missionId,taskId});
+  assert.equal(snapshot.leaseExpired,true,'database should report the settled lease as expired');
+  const reclaimed=await store.reclaim({ownerId,missionId,taskId,claimOwner:'worker-c',idempotencyKey:key,leaseMs:10_000,fencingToken:snapshot.fencingToken});
   assert.ok(reclaimed);
   assert.equal(BigInt(reclaimed.fencingToken),BigInt(winner.fencingToken)+1n);
+  assert.equal(await store.reclaim({ownerId,missionId,taskId,claimOwner:'worker-d',idempotencyKey:key,leaseMs:10_000,fencingToken:snapshot.fencingToken}),null,'stale snapshot cannot reclaim twice');
   assert.equal(await store.renew({...winner,leaseMs:10_000}),null,'stale fencing token must not renew');
   assert.equal(await store.settle({...winner,status:'completed'}),null,'stale fencing token must not settle');
   assert.equal((await store.inspect({ownerId,missionId,taskId})).claimOwner,'worker-c');

@@ -21,6 +21,10 @@ export function decideMissionTaskRecovery({
   if (!Number.isSafeInteger(maxRecoveryAttempts) || maxRecoveryAttempts < 1) throw new TypeError('maxRecoveryAttempts must be a positive integer.');
 
   if (TERMINAL.has(status)) return { decision: 'do_not_replay', reason: 'terminal_state' };
+  if (status === 'needs_review') return { decision: 'needs_review', reason: 'persisted_review_state' };
+  if (!['claimed', 'retryable', 'released'].includes(status)) {
+    return { decision: 'needs_review', reason: 'unknown_claim_state' };
+  }
   if (!leaseExpired) return { decision: 'wait', reason: 'lease_active' };
   if (!replaySafe || sideEffectsUncertain) return { decision: 'needs_review', reason: 'replay_safety_uncertain' };
   if (!checkpointValid) return { decision: 'needs_review', reason: 'checkpoint_invalid_or_missing' };

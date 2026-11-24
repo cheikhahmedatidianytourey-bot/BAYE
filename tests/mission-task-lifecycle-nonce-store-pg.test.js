@@ -5,10 +5,10 @@ import { createPostgresLifecycleNonceStore } from '../server/mission-task-lifecy
 test('inserts nonce with bound parameters and returns consumed status', async () => {
   let captured;
   const store = createPostgresLifecycleNonceStore({ pool: { async query(sql, params) {
-    captured = { sql, params }; return { rows: [{ key_id: 'k1' }] };
+    captured = { sql, params }; return { rows: [{ consumed: 1 }] };
   } } });
   assert.equal(await store.consume({ keyId: 'k1', nonce: 'nonce', expiresAt: 123456 }), true);
-  assert.match(captured.sql, /ON CONFLICT \(key_id, nonce\) DO NOTHING RETURNING/);
+  assert.match(captured.sql, /ON CONFLICT \(key_id, nonce\) DO NOTHING RETURNING 1 AS consumed/);
   assert.deepEqual(captured.params, ['k1', 'nonce', 123456]);
 });
 

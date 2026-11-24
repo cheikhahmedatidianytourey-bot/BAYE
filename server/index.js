@@ -333,7 +333,7 @@ app.post('/api/orchestration/run', orchestrationLimiter, requireBayeIdentity, as
       secret:executionApprovalRuntime.secret,
       nonceStore:executionApprovalRuntime.nonceStore
     });
-    const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\\/$/,'')+'/chat/completions';
+    const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
     const missionOptions={tasks,maxParallel:2,maxTokens:1200,reviewMode:req.body?.reviewMode==='semantic'?'semantic':'deterministic',complete:(messages,options)=>callAI({key,endpoint,model,messages,max_tokens:options.max_tokens,temperature:options.temperature})};
     const ownerNamespace=crypto.createHash('sha256').update(req.bayeIdentity.subject).digest('hex');

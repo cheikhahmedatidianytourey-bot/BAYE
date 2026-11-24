@@ -19,6 +19,7 @@ import { readJsonLimited } from './ai/bounded-json.js';
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
 import { runBayeOrchestration } from './orchestration-service.js';
+import { buildIntelligentMissionPlan } from './mission-intelligence.js';
 import { buildExecutionGraph } from './orchestration-kernel.js';
 import { createDurableMissionLedger } from './durable-mission-ledger.js';
 import { createDurableMissionCheckpointSession } from './mission-checkpoint-session.js';
@@ -84,6 +85,7 @@ const generationLimiter=rateLimit({windowMs:60_000,max:8,standardHeaders:true,le
 const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes média. Réessaie dans une minute.'}});
 const mediaStatusLimiter=rateLimit({windowMs:60_000,max:30,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de vérifications média. Réessaie dans une minute.'}});
 const orchestrationLimiter=rateLimit({windowMs:60_000,max:2,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de missions multi-agents. Réessaie dans une minute.'}});
+const missionPlanLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes de planification. Réessaie dans une minute.'}});
 app.get('/', (_req,res)=>res.type('text').send('BAYE AI CORE — Gateway online. Use /health for system status.'));
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo(),independentCore:getIndependentCoreStatus()}));
 app.get('/api/operational-audit',(req,res)=>{const secret=process.env.BAYE_MONITOR_SECRET;if(typeof secret!=='string'||secret.length<32)return res.status(503).json({error:'Audit access secret is not securely configured'});if(!secureBearerMatch(req,secret))return res.status(401).json({error:'Unauthorized'});res.json(buildOperationalAudit());});
@@ -245,6 +247,28 @@ app.post('/api/orchestration/:missionId/recovery-preview',missionMemoryLimiter,r
   const invalid=/tâche|graphe|budget|dépendance|rôle|objectif|limite|configuration|profondeur|identifiant|mission/i.test(message);
   res.status(invalid?400:503).json({error:invalid?message:'Le journal durable de mission est temporairement indisponible.'});
  }
+});
+
+// BAYE Mission Intelligence v7.0: generate and validate a plan without executing it.
+app.post('/api/orchestration/plan', missionPlanLimiter, optionalBayeIdentity, async (req,res)=>{
+  const mission=req.body?.mission;
+  if(typeof mission!=='string'||!mission.trim()||mission.length>4000){
+    return res.status(400).json({error:'La mission doit contenir entre 1 et 4 000 caractères.'});
+  }
+  const key=process.env.AI_API_KEY;
+  if(!key)return res.status(503).json({error:'Le moteur IA principal n’est pas configuré.'});
+  const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
+  const model=process.env.AI_MODEL||'gpt-4o-mini';
+  try{
+    const result=await buildIntelligentMissionPlan({
+      mission,
+      complete:(messages,options)=>callAI({key,endpoint,model,messages,max_tokens:options.max_tokens,temperature:options.temperature})
+    });
+    return res.json(result);
+  }catch(error){
+    console.error('BAYE mission planning failed:',error?.message||'unknown_error');
+    return res.status(502).json({error:'BAYE n’a pas pu produire un plan de mission valide. Aucune tâche n’a été exécutée.'});
+  }
 });
 
 // BAYE Specialist Orchestration v1: bounded text-only calls to isolated specialist prompts.

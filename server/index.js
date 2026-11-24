@@ -27,6 +27,10 @@ import { requireBayeIdentity, optionalBayeIdentity } from './identity-auth.js';
 import { validateMissionMemory } from './mission-memory.js';
 import { runAuthenticatedOrchestration } from './authenticated-orchestration.js';
 import { inspectMissionRecovery } from './mission-recovery-service.js';
+import pg from 'pg';
+import { createBayeServiceAuthenticator } from './service-producer-auth.js';
+import { createPostgresLifecycleNonceStore } from './mission-task-lifecycle-nonce-store-pg.js';
+import { createServiceAuthGatewayRouter } from './service-auth-gateway.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -39,6 +43,38 @@ app.use((req,res,next)=>{
   res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');
   next();
 });
+// Internal producer authentication is mounted before the general JSON parser so its
+// HMAC verifier receives the exact raw request bytes. It stays disabled by default.
+function buildConfiguredServiceAuthenticator() {
+  const databaseUrl = process.env.BAYE_SERVICE_AUTH_DATABASE_URL;
+  const registryText = process.env.BAYE_SERVICE_AUTH_REGISTRY;
+  if (!databaseUrl || !registryText) return null;
+  try {
+    const services = JSON.parse(registryText);
+    const pool = new pg.Pool({
+      connectionString: databaseUrl,
+      max: 5,
+      connectionTimeoutMillis: 5000,
+      idleTimeoutMillis: 30000
+    });
+    pool.on('error', () => console.error('BAYE service-auth PostgreSQL pool error'));
+    const nonceStore = createPostgresLifecycleNonceStore({ pool });
+    const authenticate = createBayeServiceAuthenticator({
+      services,
+      nonceStore,
+      requiredScope: 'gateway:probe',
+      maxAgeMs: 30_000
+    });
+    return { authenticate, pool };
+  } catch {
+    console.error('BAYE service-auth configuration is invalid; internal route remains disabled.');
+    return null;
+  }
+}
+const serviceAuthRuntime = buildConfiguredServiceAuthenticator();
+app.use('/internal/service-auth', createServiceAuthGatewayRouter({
+  authenticateServiceRequest: serviceAuthRuntime?.authenticate
+}));
 app.use(express.json({limit:'20kb'}));
 const allowedOrigin = process.env.BAYE_ORIGIN || 'https://baye-app.onrender.com';
 app.use(cors({origin: allowedOrigin, methods:['POST','GET'], allowedHeaders:['Content-Type','Authorization']}));

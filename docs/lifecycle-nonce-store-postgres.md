@@ -13,4 +13,5 @@ This module provides an atomic, durable single-use nonce store for the v6.2 sign
 - SQL uses bound parameters.
 - Storage errors propagate to the verifier, which is expected to fail closed.
 - This module does not provision PostgreSQL, credentials, roles, production wiring, or retention jobs.
-- Tests in this PR use a query stub; they are not a live PostgreSQL integration test. Validate against a disposable PostgreSQL instance before operational use.
+- Unit contract tests use a query stub. The v6.4 integration suite additionally runs against the disposable PostgreSQL 16 service configured in CI when `BAYE_TEST_DATABASE_URL` is present. It creates an isolated temporary schema, applies the migration there, checks 32 concurrent attempts for exactly one successful consumption, verifies replay rejection after reconnecting with a new pool, and confirms database errors propagate. The suite refuses non-local hosts and database names that do not identify a test database.
+- The integration suite does not validate production credentials, production role grants, a deployed retention job, application route wiring, or a live production database. Never point `BAYE_TEST_DATABASE_URL` at production.

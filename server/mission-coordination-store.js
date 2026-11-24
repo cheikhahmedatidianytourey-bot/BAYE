@@ -21,6 +21,16 @@ CREATE TABLE IF NOT EXISTS baye_mission_task_claims (
 );
 CREATE INDEX IF NOT EXISTS baye_mission_task_claims_lease_idx
   ON baye_mission_task_claims (status, lease_expires_at);
+CREATE TABLE IF NOT EXISTS baye_mission_task_recovery_evidence (
+  owner_id TEXT NOT NULL, mission_id TEXT NOT NULL, task_id TEXT NOT NULL,
+  replay_safe BOOLEAN NOT NULL, checkpoint_valid BOOLEAN NOT NULL,
+  side_effects_uncertain BOOLEAN NOT NULL,
+  recovery_attempts INTEGER NOT NULL CHECK (recovery_attempts >= 0),
+  max_recovery_attempts INTEGER NOT NULL CHECK (max_recovery_attempts BETWEEN 1 AND 100),
+  evidence_revision BIGINT NOT NULL CHECK (evidence_revision > 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (owner_id, mission_id, task_id)
+);
 `;
 
 function requireString(value,pattern,message){
@@ -95,6 +105,12 @@ export function createPostgresMissionCoordinationStore({pool}={}){
    `,[ownerId,missionId,taskId]);
    const row=result.rows?.[0];
    return row?{...claimRow(row),status:row.status,leaseExpired:row.lease_expired===true}:null;
+  },
+  async inspectRecoveryEvidence(input={}){
+   const {ownerId,missionId,taskId}=scope(input);
+   const result=await pool.query("SELECT replay_safe,checkpoint_valid,side_effects_uncertain,recovery_attempts,max_recovery_attempts,evidence_revision FROM baye_mission_task_recovery_evidence WHERE owner_id=$1 AND mission_id=$2 AND task_id=$3",[ownerId,missionId,taskId]);
+   const row=result.rows?.[0];
+   return row?{replaySafe:row.replay_safe,checkpointValid:row.checkpoint_valid,sideEffectsUncertain:row.side_effects_uncertain,recoveryAttempts:Number(row.recovery_attempts),maxRecoveryAttempts:Number(row.max_recovery_attempts),evidenceRevision:String(row.evidence_revision)}:null;
   },
   async reclaim(input={}){
    const {ownerId,missionId,taskId}=scope(input);

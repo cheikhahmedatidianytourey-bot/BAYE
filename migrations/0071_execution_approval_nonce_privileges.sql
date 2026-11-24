@@ -4,8 +4,16 @@
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'baye_execution_approver') THEN
-    RAISE EXCEPTION 'Required role baye_execution_approver does not exist';
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname = 'baye_execution_approver'
+      AND rolcanlogin
+      AND NOT rolsuper
+      AND NOT rolcreatedb
+      AND NOT rolcreaterole
+      AND NOT rolinherit
+  ) THEN
+    RAISE EXCEPTION 'Required role baye_execution_approver must be LOGIN, NOSUPERUSER, NOCREATEDB, NOCREATEROLE, NOINHERIT';
   END IF;
 END
 $$;

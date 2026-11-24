@@ -9,7 +9,7 @@ export function createPostgresLifecycleNonceStore({ pool } = {}) {
       if (typeof keyId !== 'string' || !keyId || typeof nonce !== 'string' || !nonce ||
           !Number.isSafeInteger(expiresAt)) return false;
       const result = await pool.query(
-        'INSERT INTO baye_lifecycle_nonces (key_id, nonce, expires_at) VALUES ($1, $2, to_timestamp($3 / 1000.0)) ON CONFLICT (key_id, nonce) DO NOTHING RETURNING 1 AS consumed',
+        'INSERT INTO baye_lifecycle_nonces (key_id, nonce, expires_at) VALUES ($1, $2, to_timestamp($3 / 1000.0)) ON CONFLICT DO NOTHING RETURNING 1 AS consumed',
         [keyId, nonce, expiresAt]
       );
       return Array.isArray(result?.rows) && result.rows.length === 1;

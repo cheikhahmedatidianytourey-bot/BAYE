@@ -85,6 +85,6 @@ test('fails closed when the durable nonce store is missing or unavailable',async
 test('rejects malformed tokens and unvalidated graphs',async()=>{
  const store=nonceStoreFixture();
  await assert.rejects(()=>verifyAndConsumeExecutionApproval({token:'not.a.valid.token',ownerId,missionId,graph:graph(),secret,nonceStore:store,now:1001}));
- await assert.rejects(()=>issueExecutionApproval({approved:true,ownerId,missionId,graph:{status:'pending',mode:'plan_only',tasks:[]},secret}));
+ assert.throws(()=>issueExecutionApproval({approved:true,ownerId,missionId,graph:{status:'pending',mode:'plan_only',tasks:[]},secret}),/graphe de mission validé/);
  assert.equal(store.calls.length,0);
 });

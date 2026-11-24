@@ -59,17 +59,17 @@ test('PostgreSQL-backed service authentication enforces durable single-use nonce
   assert.match(databaseName, /(^|[_-])test($|[_-])/i,
     'Database name must clearly identify a test database.');
 
-  const schema = \`baye_service_auth_\${randomUUID().replaceAll('-', '')}\`;
+  const schema = `baye_service_auth_${randomUUID().replaceAll('-', '')}`;
   const adminPool = new Pool({ connectionString: databaseUrl, max: 2 });
   let pool;
   const openScopedPool = () => new Pool({
     connectionString: databaseUrl,
-    options: \`-c search_path=\${schema}\`,
+    options: `-c search_path=${schema}`,
     max: 12
   });
 
   try {
-    await adminPool.query(\`CREATE SCHEMA "\${schema}"\`);
+    await adminPool.query(`CREATE SCHEMA "${schema}"`);
     pool = openScopedPool();
     await pool.query(await readFile(migrationUrl, 'utf8'));
 
@@ -120,7 +120,7 @@ test('PostgreSQL-backed service authentication enforces durable single-use nonce
     });
   } finally {
     if (pool) await pool.end();
-    await adminPool.query(\`DROP SCHEMA IF EXISTS "\${schema}" CASCADE\`);
+    await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     await adminPool.end();
   }
 });

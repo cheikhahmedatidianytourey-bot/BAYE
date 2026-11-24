@@ -32,7 +32,7 @@ test('Gateway service-auth PostgreSQL role can consume nonces and has INSERT-onl
     assert.equal(existing.rows.length, 0,
       'Refusing to modify a pre-existing database role; use an isolated CI cluster.');
 
-    await admin.query(`CREATE ROLE ${roleName} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT`);
+    await admin.query(`CREATE ROLE ${roleName} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT`);
     roleCreated = true;
     await admin.query(`CREATE SCHEMA "${schema}"`);
 
@@ -62,7 +62,7 @@ test('Gateway service-auth PostgreSQL role can consume nonces and has INSERT-onl
       );
       assert.deepEqual(roleState.rows[0], {
         rolsuper: false, rolcreatedb: false, rolcreaterole: false,
-        rolinherit: false, rolcanlogin: false
+        rolinherit: false, rolcanlogin: true
       });
 
       client = new Client({ connectionString: databaseUrl, options: `-c search_path=${schema}` });

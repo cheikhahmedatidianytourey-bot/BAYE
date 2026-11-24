@@ -39,5 +39,5 @@ test('fails closed when nonce storage is unavailable',async()=>{
 });
 test('requires key map and nonce store',()=>{
  assert.throws(()=>createSignedLifecycleEvidenceAuthorizer({keys:{},nonceStore:{consume(){}}}),/signing-key map/);
- assert.throws(()=>createSignedLifecycleEvidenceAuthorizer({keys:{k:'short'},nonceStore:{consume(){}}}),/atomic lifecycle nonce store/);
+ assert.throws(()=>createSignedLifecycleEvidenceAuthorizer({keys:{k:'short'}}),/atomic lifecycle nonce store/);
 });

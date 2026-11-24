@@ -21,7 +21,7 @@ test('issues a short-lived approval bound to the owner, mission, graph and speci
  assert.equal(result.approval.status,'approved');
  assert.equal(result.approval.missionId,missionId);
  assert.equal(result.approval.taskCount,2);
- assert.deepEqual(result.approval.scopes,['specialist:text_inference']);
+ assert.deepEqual(result.approval.scopes,['specialist:text_inference','mission:checkpoint_write','mission:memory_write']);
  assert.equal(result.approval.oneTimeUse,true);
  assert.equal(result.approval.externalActions,false);
  assert.equal(result.approval.expiresAt,1120);
@@ -46,7 +46,8 @@ test('accepts an approval once and consumes its durable nonce before authorizing
  assert.equal(result.ownerId,ownerId);
  assert.equal(result.missionId,missionId);
  assert.deepEqual(result.taskIds,['research','quality']);
- assert.deepEqual(result.scopes,['specialist:text_inference']);
+ assert.equal(result.reviewMode,'deterministic');
+ assert.deepEqual(result.scopes,['specialist:text_inference','mission:checkpoint_write','mission:memory_write']);
  assert.equal(result.oneTimeUse,true);
  assert.equal(store.calls.length,1);
  assert.equal(store.calls[0].keyId,'mission-execution-approval-v1');
@@ -87,4 +88,14 @@ test('rejects malformed tokens and unvalidated graphs',async()=>{
  await assert.rejects(()=>verifyAndConsumeExecutionApproval({token:'not.a.valid.token',ownerId,missionId,graph:graph(),secret,nonceStore:store,now:1001}));
  assert.throws(()=>issueExecutionApproval({approved:true,ownerId,missionId,graph:{status:'pending',mode:'plan_only',tasks:[]},secret}),/graphe de mission validé/);
  assert.equal(store.calls.length,0);
+});
+
+test('binds semantic review permission and mode to the exact approval',async()=>{
+ const issued=approve({reviewMode:'semantic',now:1000}),store=nonceStoreFixture();
+ assert.ok(issued.approval.scopes.includes('specialist:semantic_review'));
+ await assert.rejects(()=>verifyAndConsumeExecutionApproval({token:issued.token,ownerId,missionId,graph:graph(),secret,nonceStore:store,now:1001}),/mode de vérification/i);
+ assert.equal(store.calls.length,0);
+ const result=await verifyAndConsumeExecutionApproval({token:issued.token,ownerId,missionId,graph:graph(),reviewMode:'semantic',secret,nonceStore:store,now:1001});
+ assert.equal(result.reviewMode,'semantic');
+ assert.ok(result.scopes.includes('specialist:semantic_review'));
 });

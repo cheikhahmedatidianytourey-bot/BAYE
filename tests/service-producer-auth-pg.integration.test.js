@@ -32,7 +32,7 @@ function signedRequest({ nonce, keyId = 'key-primary', secret = primarySecret, t
     createHash('sha256').update(rawBody).digest('hex'),
     'lifecycle-producer',
     keyId
-  ].join('\\n');
+  ].join('\n');
   const signature = createHmac('sha256', secret).update(canonical, 'utf8').digest('hex');
   const headers = {
     'x-baye-service-id': 'lifecycle-producer',
@@ -53,23 +53,23 @@ test('PostgreSQL-backed service authentication enforces durable single-use nonce
   skip: !databaseUrl ? 'BAYE_TEST_DATABASE_URL is not configured' : false
 }, async (t) => {
   const parsed = new URL(databaseUrl);
-  const databaseName = parsed.pathname.replace(/^\\//, '');
+  const databaseName = parsed.pathname.replace(/^\//, '');
   assert.ok(['localhost', '127.0.0.1', '::1'].includes(parsed.hostname),
     'Integration tests are restricted to a local disposable PostgreSQL server.');
   assert.match(databaseName, /(^|[_-])test($|[_-])/i,
     'Database name must clearly identify a test database.');
 
-  const schema = `baye_service_auth_${randomUUID().replaceAll('-', '')}`;
+  const schema = \`baye_service_auth_\${randomUUID().replaceAll('-', '')}\`;
   const adminPool = new Pool({ connectionString: databaseUrl, max: 2 });
   let pool;
   const openScopedPool = () => new Pool({
     connectionString: databaseUrl,
-    options: `-c search_path=${schema}`,
+    options: \`-c search_path=\${schema}\`,
     max: 12
   });
 
   try {
-    await adminPool.query(`CREATE SCHEMA "${schema}"`);
+    await adminPool.query(\`CREATE SCHEMA "\${schema}"\`);
     pool = openScopedPool();
     await pool.query(await readFile(migrationUrl, 'utf8'));
 
@@ -120,7 +120,7 @@ test('PostgreSQL-backed service authentication enforces durable single-use nonce
     });
   } finally {
     if (pool) await pool.end();
-    await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    await adminPool.query(\`DROP SCHEMA IF EXISTS "\${schema}" CASCADE\`);
     await adminPool.end();
   }
 });

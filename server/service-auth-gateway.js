@@ -26,7 +26,14 @@ export function createServiceAuthGatewayRouter({ authenticateServiceRequest } = 
   router.post(
     '/verify',
     limiter,
+    (req, res, next) => {
+      if (!req.is(['application/json', 'application/*+json'])) {
+        return res.status(415).json({ error: 'Le corps doit être au format JSON.' });
+      }
+      return next();
+    },
     express.json({
+      type: ['application/json', 'application/*+json'],
       limit: '20kb',
       strict: true,
       verify(req, _res, buffer) {

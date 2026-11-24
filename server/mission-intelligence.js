@@ -31,8 +31,13 @@ function parsePlannerResponse(response) {
         Object.keys(task).some(key => !ALLOWED_TASK_KEYS.has(key))) {
       fail('Une tâche contient des champs non autorisés.');
     }
+    for (const required of ['id', 'role', 'objective']) {
+      if (!Object.hasOwn(task, required)) fail('Une tâche ne contient pas tous les champs obligatoires.');
+    }
     if (task.dependsOn === undefined) task.dependsOn = [];
+    else if (!Array.isArray(task.dependsOn)) fail('La liste des dépendances doit être un tableau.');
     if (task.budget === undefined) task.budget = 1;
+    else if (!Number.isFinite(task.budget) || task.budget <= 0) fail('Le budget de chaque tâche doit être un nombre positif.');
   }
   return parsed.tasks;
 }

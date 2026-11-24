@@ -99,3 +99,20 @@ test('Mission Intelligence rejects invalid or oversized objectives before model 
   await assert.rejects(() => buildIntelligentMissionPlan({ mission: 'x'.repeat(4001), complete }), /1 et 4 000 caractères/);
   assert.equal(called, false);
 });
+
+test('Mission Intelligence rejects null dependency lists and non-positive budgets', async () => {
+  await assert.rejects(
+    () => buildIntelligentMissionPlan({
+      mission: 'Planifier un projet.',
+      complete: async () => plannerResponse([{ id: 'a', role: 'research', objective: 'Analyser.', dependsOn: null }])
+    }),
+    /dépendances doit être un tableau/
+  );
+  await assert.rejects(
+    () => buildIntelligentMissionPlan({
+      mission: 'Planifier un projet.',
+      complete: async () => plannerResponse([{ id: 'a', role: 'research', objective: 'Analyser.', budget: 0 }])
+    }),
+    /budget de chaque tâche/
+  );
+});

@@ -257,7 +257,7 @@ app.post('/api/orchestration/plan', missionPlanLimiter, optionalBayeIdentity, as
   }
   const key=process.env.AI_API_KEY;
   if(!key)return res.status(503).json({error:'Le moteur IA principal n’est pas configuré.'});
-  const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\\/$/,'')+'/chat/completions';
+  const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
   const model=process.env.AI_MODEL||'gpt-4o-mini';
   try{
     const result=await buildIntelligentMissionPlan({

@@ -27,25 +27,35 @@ function event(nonce = 'nonce_123456789012') {
 }
 
 function mockPool({ failEvidence = false } = {}) {
-  const state = { calls: [], consumed: new Set(), evidence: [], rollbacks: 0, commits: 0, releases: 0 };
+  const state = {
+    calls: [], persistedNonces: new Set(), pendingNonces: new Set(),
+    evidence: [], rollbacks: 0, commits: 0, releases: 0
+  };
   return {
     state,
     async connect() {
       return {
         async query(sql, values = []) {
           state.calls.push({ sql, values });
-          if (sql === 'BEGIN' || sql === 'COMMIT') {
-            if (sql === 'COMMIT') state.commits++;
+          if (sql === 'BEGIN') {
+            state.pendingNonces.clear();
+            return { rows: [] };
+          }
+          if (sql === 'COMMIT') {
+            for (const nonce of state.pendingNonces) state.persistedNonces.add(nonce);
+            state.pendingNonces.clear();
+            state.commits++;
             return { rows: [] };
           }
           if (sql === 'ROLLBACK') {
+            state.pendingNonces.clear();
             state.rollbacks++;
             return { rows: [] };
           }
           if (sql.includes('INSERT INTO baye_lifecycle_nonces')) {
             const nonceKey = values.join(':');
-            if (state.consumed.has(nonceKey)) return { rows: [] };
-            state.consumed.add(nonceKey);
+            if (state.persistedNonces.has(nonceKey) || state.pendingNonces.has(nonceKey)) return { rows: [] };
+            state.pendingNonces.add(nonceKey);
             return { rows: [{ consumed: 1 }] };
           }
           if (sql.includes('INSERT INTO baye_mission_task_recovery_evidence')) {
@@ -75,6 +85,7 @@ test('valid signed event consumes nonce and writes evidence inside one transacti
   assert.equal(receipt.evidenceRevision, '1');
   assert.equal(pool.state.commits, 1);
   assert.equal(pool.state.rollbacks, 0);
+  assert.equal(pool.state.persistedNonces.size, 1);
   assert.equal(pool.state.evidence.length, 1);
   assert.equal(pool.state.calls[0].sql, 'BEGIN');
   assert.equal(pool.state.calls.at(-1).sql, 'COMMIT');
@@ -89,7 +100,8 @@ test('invalid signature is denied without consuming a nonce or writing evidence'
   const invalid = event();
   invalid.authEnvelope.signature = '0'.repeat(64);
   await assert.rejects(() => recorder.record(invalid), /authorization denied/);
-  assert.equal(pool.state.consumed.size, 0);
+  assert.equal(pool.state.persistedNonces.size, 0);
+  assert.equal(pool.state.pendingNonces.size, 0);
   assert.equal(pool.state.evidence.length, 0);
   assert.equal(pool.state.rollbacks, 1);
   assert.equal(pool.state.commits, 0);
@@ -101,7 +113,8 @@ test('evidence write failure rolls back nonce consumption', async () => {
     pool, keys: { lifecycle_v1: key }, now: () => timestamp
   });
   await assert.rejects(() => recorder.record(event()), /evidence database unavailable/);
-  assert.equal(pool.state.consumed.size, 1);
+  assert.equal(pool.state.persistedNonces.size, 0);
+  assert.equal(pool.state.pendingNonces.size, 0);
   assert.equal(pool.state.rollbacks, 1);
   assert.equal(pool.state.commits, 0);
 });

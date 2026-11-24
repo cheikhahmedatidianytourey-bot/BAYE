@@ -2,10 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decideMissionTaskRecovery } from '../server/mission-task-recovery-decision.js';
 
-const base = { status: 'running', leaseExpired: true, replaySafe: true, checkpointValid: true, sideEffectsUncertain: false, recoveryAttempts: 0, maxRecoveryAttempts: 3 };
+const base = { status: 'claimed', leaseExpired: true, replaySafe: true, checkpointValid: true, sideEffectsUncertain: false, recoveryAttempts: 0, maxRecoveryAttempts: 3 };
 
 test('terminal tasks are never replayed', () => {
   assert.deepEqual(decideMissionTaskRecovery({ ...base, status: 'completed' }), { decision: 'do_not_replay', reason: 'terminal_state' });
+});
+test('persisted review state remains blocked', () => {
+  assert.deepEqual(decideMissionTaskRecovery({ ...base, status: 'needs_review' }), { decision: 'needs_review', reason: 'persisted_review_state' });
+});
+test('unknown claim states fail closed', () => {
+  assert.deepEqual(decideMissionTaskRecovery({ ...base, status: 'running' }), { decision: 'needs_review', reason: 'unknown_claim_state' });
 });
 test('active lease requires waiting', () => {
   assert.deepEqual(decideMissionTaskRecovery({ ...base, leaseExpired: false }), { decision: 'wait', reason: 'lease_active' });

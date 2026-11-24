@@ -294,11 +294,13 @@ app.post('/api/orchestration/:missionId/approve', executionApprovalLimiter, requ
     if(req.body?.approved!==true)return res.status(400).json({error:'Une approbation explicite est obligatoire.'});
     const tasks=req.body?.tasks;
     const graph=buildExecutionGraph(tasks,{maxTasks:5,maxDependenciesPerTask:4,maxTotalBudget:10,maxDepth:5});
+    const reviewMode=req.body?.reviewMode==='semantic'?'semantic':'deterministic';
     const issued=issueExecutionApproval({
       approved:true,
       ownerId:req.bayeIdentity.subject,
       missionId:req.params.missionId,
       graph,
+      reviewMode,
       secret:executionApprovalRuntime.secret,
       ttlSeconds:300
     });
@@ -325,17 +327,19 @@ app.post('/api/orchestration/run', orchestrationLimiter, requireBayeIdentity, as
     if(!key)return res.status(503).json({error:'Le fournisseur IA principal n’est pas configuré.'});
     if(!executionApprovalRuntime)return res.status(503).json({error:'Le service d’approbation durable n’est pas configuré. Exécution refusée.'});
     const graph=buildExecutionGraph(tasks,{maxTasks:5,maxDependenciesPerTask:4,maxTotalBudget:10,maxDepth:5});
+    const reviewMode=req.body?.reviewMode==='semantic'?'semantic':'deterministic';
     const authorization=await verifyAndConsumeExecutionApproval({
       token:req.body.approvalToken,
       ownerId:req.bayeIdentity.subject,
       missionId,
       graph,
+      reviewMode,
       secret:executionApprovalRuntime.secret,
       nonceStore:executionApprovalRuntime.nonceStore
     });
     const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
-    const missionOptions={tasks,maxParallel:2,maxTokens:1200,reviewMode:req.body?.reviewMode==='semantic'?'semantic':'deterministic',complete:(messages,options)=>callAI({key,endpoint,model,messages,max_tokens:options.max_tokens,temperature:options.temperature})};
+    const missionOptions={tasks,maxParallel:2,maxTokens:1200,reviewMode,complete:(messages,options)=>callAI({key,endpoint,model,messages,max_tokens:options.max_tokens,temperature:options.temperature})};
     const ownerNamespace=crypto.createHash('sha256').update(req.bayeIdentity.subject).digest('hex');
     const checkpointSession=createDurableMissionCheckpointSession({ledger:durableMissionLedger,ownerId:ownerNamespace,missionId,graph});
     let result;

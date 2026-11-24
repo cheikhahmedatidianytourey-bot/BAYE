@@ -45,13 +45,15 @@ function claimRow(row){
   fencingToken:String(row.fencing_token),leaseExpiresAt:row.lease_expires_at
  }:null;
 }
+function requireFencingToken(value){
+ return requireString(String(value??''),/^[1-9][0-9]{0,18}$/,'Fencing token is invalid.');
+}
 
 /**
  * PostgreSQL-backed cross-process claim/lease store.
- * The claim itself is one INSERT .. ON CONFLICT statement, so the unique key
- * and conditional update are arbitrated by PostgreSQL rather than process memory.
- * The caller must pass a shared pg-compatible pool and run ensureSchema during
- * an explicit migration/startup phase. This store is not wired into workers here.
+ * Initial claims use one conditional upsert. Recovery uses a separate
+ * snapshot-bound compare-and-swap so an inspected generation cannot be
+ * silently replaced after another worker has reclaimed it.
  */
 export function createPostgresMissionCoordinationStore({pool}={}){
  if(!pool||typeof pool.query!=='function')throw new TypeError('A PostgreSQL-compatible pool is required.');
@@ -83,10 +85,43 @@ export function createPostgresMissionCoordinationStore({pool}={}){
    `,[ownerId,missionId,taskId,claimOwner,idempotencyKey,leaseMs]);
    return claimRow(result.rows?.[0]??null);
   },
+  async inspect(input={}){
+   const {ownerId,missionId,taskId}=scope(input);
+   const result=await pool.query(`
+     SELECT owner_id,mission_id,task_id,claim_owner,idempotency_key,lease_expires_at,
+            fencing_token,status,(lease_expires_at<=NOW()) AS lease_expired
+       FROM baye_mission_task_claims
+       WHERE owner_id=$1 AND mission_id=$2 AND task_id=$3
+   `,[ownerId,missionId,taskId]);
+   const row=result.rows?.[0];
+   return row?{...claimRow(row),status:row.status,leaseExpired:row.lease_expired===true}:null;
+  },
+  async reclaim(input={}){
+   const {ownerId,missionId,taskId}=scope(input);
+   const claimOwner=requireString(input.claimOwner,WORKER,'Claim owner is invalid.');
+   const idempotencyKey=requireString(input.idempotencyKey,IDEMPOTENCY,'Stable idempotency key is required.');
+   const fencingToken=requireFencingToken(input.fencingToken);
+   const leaseMs=requireLease(input.leaseMs);
+   const result=await pool.query(`
+     UPDATE baye_mission_task_claims
+       SET claim_owner=$4,
+           lease_expires_at=NOW()+($7 * INTERVAL '1 millisecond'),
+           fencing_token=fencing_token+1,
+           status='claimed',
+           updated_at=NOW()
+       WHERE owner_id=$1 AND mission_id=$2 AND task_id=$3
+         AND idempotency_key=$5
+         AND fencing_token=$6::BIGINT
+         AND status IN ('claimed','retryable','released')
+         AND lease_expires_at<=NOW()
+     RETURNING owner_id,mission_id,task_id,claim_owner,idempotency_key,lease_expires_at,fencing_token
+   `,[ownerId,missionId,taskId,claimOwner,idempotencyKey,fencingToken,leaseMs]);
+   return claimRow(result.rows?.[0]??null);
+  },
   async renew(input={}){
    const {ownerId,missionId,taskId}=scope(input);
    const claimOwner=requireString(input.claimOwner,WORKER,'Claim owner is invalid.');
-   const fencingToken=requireString(String(input.fencingToken??''),/^[1-9][0-9]{0,18}$/,'Fencing token is invalid.');
+   const fencingToken=requireFencingToken(input.fencingToken);
    const leaseMs=requireLease(input.leaseMs);
    const result=await pool.query(`
      UPDATE baye_mission_task_claims
@@ -101,7 +136,7 @@ export function createPostgresMissionCoordinationStore({pool}={}){
   async settle(input={}){
    const {ownerId,missionId,taskId}=scope(input);
    const claimOwner=requireString(input.claimOwner,WORKER,'Claim owner is invalid.');
-   const fencingToken=requireString(String(input.fencingToken??''),/^[1-9][0-9]{0,18}$/,'Fencing token is invalid.');
+   const fencingToken=requireFencingToken(input.fencingToken);
    const status=input.status;
    if(!['completed','needs_review','retryable','released'].includes(status))throw new TypeError('Invalid terminal claim status.');
    const result=await pool.query(`
@@ -112,16 +147,6 @@ export function createPostgresMissionCoordinationStore({pool}={}){
          AND status='claimed' AND lease_expires_at>NOW()
        RETURNING owner_id,mission_id,task_id,claim_owner,idempotency_key,lease_expires_at,fencing_token,status
    `,[ownerId,missionId,taskId,claimOwner,fencingToken,status]);
-   const row=result.rows?.[0];
-   return row?{...claimRow(row),status:row.status}:null;
-  },
-  async inspect(input={}){
-   const {ownerId,missionId,taskId}=scope(input);
-   const result=await pool.query(`
-     SELECT owner_id,mission_id,task_id,claim_owner,idempotency_key,lease_expires_at,fencing_token,status
-       FROM baye_mission_task_claims
-       WHERE owner_id=$1 AND mission_id=$2 AND task_id=$3
-   `,[ownerId,missionId,taskId]);
    const row=result.rows?.[0];
    return row?{...claimRow(row),status:row.status}:null;
   }

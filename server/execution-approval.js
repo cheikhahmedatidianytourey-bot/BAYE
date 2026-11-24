@@ -73,8 +73,14 @@ export async function verifyAndConsumeExecutionApproval({token,ownerId,missionId
  const parts=token.split('.');
  if(parts.length!==3)fail('Structure du jeton d’approbation invalide.');
  const [encodedHeader,encodedPayload,signature]=parts;
- const header=JSON.parse(decodeSegment(encodedHeader).toString('utf8'));
- const claims=JSON.parse(decodeSegment(encodedPayload).toString('utf8'));
+ let header,claims;
+ try{
+  header=JSON.parse(decodeSegment(encodedHeader).toString('utf8'));
+  claims=JSON.parse(decodeSegment(encodedPayload).toString('utf8'));
+ }catch(error){
+  if(error?.code==='EXECUTION_APPROVAL_INVALID')throw error;
+  fail('Contenu JSON du jeton d’approbation invalide.');
+ }
  if(!header||header.alg!=='HS256'||header.typ!=='BAYE-APPROVAL'||Object.keys(header).length!==2)fail('En-tête du jeton d’approbation invalide.');
  const expected=crypto.createHmac('sha256',secret).update(encodedHeader+'.'+encodedPayload,'utf8').digest('base64url');
  if(!safeEqual(expected,signature))fail('Signature d’approbation invalide.');

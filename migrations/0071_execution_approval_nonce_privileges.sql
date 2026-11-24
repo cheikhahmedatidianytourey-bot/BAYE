@@ -1,0 +1,33 @@
+-- BAYE v7.1 — least-privilege nonce access for one-time mission approvals.
+-- Apply as the nonce table owner / database administrator after migration 0063.
+-- Provision the login role and its credentials separately; this migration creates neither.
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname = 'baye_execution_approver'
+      AND rolcanlogin
+      AND NOT rolsuper
+      AND NOT rolcreatedb
+      AND NOT rolcreaterole
+      AND NOT rolinherit
+  ) THEN
+    RAISE EXCEPTION 'Required role baye_execution_approver must be LOGIN, NOSUPERUSER, NOCREATEDB, NOCREATEROLE, NOINHERIT';
+  END IF;
+END
+$$;
+
+DO $$
+DECLARE
+  target_schema TEXT := current_schema();
+  nonce_table TEXT := format('%I.%I', current_schema(), 'baye_lifecycle_nonces');
+BEGIN
+  EXECUTE format('REVOKE ALL PRIVILEGES ON TABLE %s FROM PUBLIC', nonce_table);
+  EXECUTE format('REVOKE ALL PRIVILEGES ON TABLE %s FROM baye_execution_approver', nonce_table);
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO baye_execution_approver', target_schema);
+  EXECUTE format('GRANT INSERT ON TABLE %s TO baye_execution_approver', nonce_table);
+  -- INSERT ... ON CONFLICT DO NOTHING RETURNING is the only required operation.
+  -- No SELECT, UPDATE, DELETE, TRUNCATE, ownership, or role membership is granted.
+END
+$$;

@@ -32,6 +32,7 @@ import pg from 'pg';
 import { createBayeServiceAuthenticator } from './service-producer-auth.js';
 import { createPostgresLifecycleNonceStore } from './mission-task-lifecycle-nonce-store-pg.js';
 import { createServiceAuthGatewayRouter } from './service-auth-gateway.js';
+import { issueExecutionApproval, verifyAndConsumeExecutionApproval } from './execution-approval.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -73,6 +74,20 @@ function buildConfiguredServiceAuthenticator() {
   }
 }
 const serviceAuthRuntime = buildConfiguredServiceAuthenticator();
+function buildExecutionApprovalRuntime(){
+  const databaseUrl=process.env.BAYE_EXECUTION_APPROVAL_DATABASE_URL;
+  const secret=process.env.BAYE_EXECUTION_APPROVAL_SECRET;
+  if(!databaseUrl||typeof secret!=='string'||Buffer.byteLength(secret)<32)return null;
+  try{
+    const pool=new pg.Pool({connectionString:databaseUrl,max:5,connectionTimeoutMillis:5000,idleTimeoutMillis:30000,options:'-c search_path=public'});
+    pool.on('error',()=>console.error('BAYE execution-approval PostgreSQL pool error'));
+    return {secret,nonceStore:createPostgresLifecycleNonceStore({pool}),pool};
+  }catch{
+    console.error('BAYE execution-approval configuration is invalid; approved execution remains disabled.');
+    return null;
+  }
+}
+const executionApprovalRuntime=buildExecutionApprovalRuntime();
 app.use('/internal/service-auth', createServiceAuthGatewayRouter({
   authenticateServiceRequest: serviceAuthRuntime?.authenticate
 }));
@@ -86,6 +101,7 @@ const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyH
 const mediaStatusLimiter=rateLimit({windowMs:60_000,max:30,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de vérifications média. Réessaie dans une minute.'}});
 const orchestrationLimiter=rateLimit({windowMs:60_000,max:2,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de missions multi-agents. Réessaie dans une minute.'}});
 const missionPlanLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes de planification. Réessaie dans une minute.'}});
+const executionApprovalLimiter=rateLimit({windowMs:60_000,max:3,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de demandes d’approbation. Réessaie dans une minute.'}});
 app.get('/', (_req,res)=>res.type('text').send('BAYE AI CORE — Gateway online. Use /health for system status.'));
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo(),independentCore:getIndependentCoreStatus()}));
 app.get('/api/operational-audit',(req,res)=>{const secret=process.env.BAYE_MONITOR_SECRET;if(typeof secret!=='string'||secret.length<32)return res.status(503).json({error:'Audit access secret is not securely configured'});if(!secureBearerMatch(req,secret))return res.status(401).json({error:'Unauthorized'});res.json(buildOperationalAudit());});
@@ -271,38 +287,79 @@ app.post('/api/orchestration/plan', missionPlanLimiter, optionalBayeIdentity, as
   }
 });
 
-// BAYE Specialist Orchestration v1: bounded text-only calls to isolated specialist prompts.
-app.post('/api/orchestration/run', orchestrationLimiter, optionalBayeIdentity, async (req,res)=>{
+// BAYE v7.1: an authenticated owner explicitly approves one exact graph before execution.
+app.post('/api/orchestration/:missionId/approve', executionApprovalLimiter, requireBayeIdentity, (req,res)=>{
+  try{
+    if(!executionApprovalRuntime)return res.status(503).json({error:'Le service d’approbation durable n’est pas configuré. Aucune mission ne peut être exécutée.'});
+    if(req.body?.approved!==true)return res.status(400).json({error:'Une approbation explicite est obligatoire.'});
+    const tasks=req.body?.tasks;
+    const graph=buildExecutionGraph(tasks,{maxTasks:5,maxDependenciesPerTask:4,maxTotalBudget:10,maxDepth:5});
+    const reviewMode=req.body?.reviewMode==='semantic'?'semantic':'deterministic';
+    const issued=issueExecutionApproval({
+      approved:true,
+      ownerId:req.bayeIdentity.subject,
+      missionId:req.params.missionId,
+      graph,
+      reviewMode,
+      secret:executionApprovalRuntime.secret,
+      ttlSeconds:300
+    });
+    return res.status(201).json({
+      approval:issued.approval,
+      approvalToken:issued.token,
+      notice:'Cette autorisation est limitée à cette identité, cette mission et ces tâches. Elle expire dans cinq minutes et ne peut être utilisée qu’une fois.'
+    });
+  }catch(error){
+    return res.status(400).json({error:error?.message||'Demande d’approbation invalide.'});
+  }
+});
+
+// Execution is fail-closed: identity, exact graph binding and durable one-time approval are mandatory.
+app.post('/api/orchestration/run', orchestrationLimiter, requireBayeIdentity, async (req,res)=>{
   try{
     const tasks=req.body?.tasks;
     if(!Array.isArray(tasks)||tasks.length<1||tasks.length>5)return res.status(400).json({error:'Fournis de 1 à 5 tâches spécialistes.'});
+    const missionId=req.body?.missionId;
+    if(typeof missionId!=='string'||!/^[a-zA-Z0-9_-]{8,100}$/.test(missionId))return res.status(400).json({error:'Un identifiant de mission valide est obligatoire.'});
+    if(req.body?.priorMemory!=null)return res.status(400).json({error:'Pour une mission authentifiée, la mémoire est chargée exclusivement depuis le stockage serveur.'});
+    if(typeof req.body?.approvalToken!=='string')return res.status(403).json({error:'Une approbation explicite et valide est obligatoire.'});
     const key=process.env.AI_API_KEY;
     if(!key)return res.status(503).json({error:'Le fournisseur IA principal n’est pas configuré.'});
+    if(!executionApprovalRuntime)return res.status(503).json({error:'Le service d’approbation durable n’est pas configuré. Exécution refusée.'});
+    const graph=buildExecutionGraph(tasks,{maxTasks:5,maxDependenciesPerTask:4,maxTotalBudget:10,maxDepth:5});
+    const reviewMode=req.body?.reviewMode==='semantic'?'semantic':'deterministic';
+    const authorization=await verifyAndConsumeExecutionApproval({
+      token:req.body.approvalToken,
+      ownerId:req.bayeIdentity.subject,
+      missionId,
+      graph,
+      reviewMode,
+      secret:executionApprovalRuntime.secret,
+      nonceStore:executionApprovalRuntime.nonceStore
+    });
     const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
     const model=process.env.AI_MODEL||'gpt-4o-mini';
-    const missionOptions={tasks,maxParallel:2,maxTokens:1200,reviewMode:req.body?.reviewMode==='semantic'?'semantic':'deterministic',complete:(messages,options)=>callAI({key,endpoint,model,messages,max_tokens:options.max_tokens,temperature:options.temperature})};
+    const missionOptions={tasks,maxParallel:2,maxTokens:1200,reviewMode,complete:(messages,options)=>callAI({key,endpoint,model,messages,max_tokens:options.max_tokens,temperature:options.temperature})};
+    const ownerNamespace=crypto.createHash('sha256').update(req.bayeIdentity.subject).digest('hex');
+    const checkpointSession=createDurableMissionCheckpointSession({ledger:durableMissionLedger,ownerId:ownerNamespace,missionId,graph});
     let result;
-    if(req.bayeIdentity){
-      if(req.body?.priorMemory!=null)return res.status(400).json({error:'Pour une mission authentifiée, la mémoire est chargée exclusivement depuis le stockage serveur.'});
-      const missionId=req.body?.missionId??('mission_'+crypto.randomUUID().replace(/-/g,''));
-      const graph=buildExecutionGraph(tasks,{maxTasks:5,maxDependenciesPerTask:4,maxTotalBudget:10,maxDepth:5});
-      const ownerNamespace=crypto.createHash('sha256').update(req.bayeIdentity.subject).digest('hex');
-      const checkpointSession=createDurableMissionCheckpointSession({ledger:durableMissionLedger,ownerId:ownerNamespace,missionId,graph});
-      try{
-        result=await runAuthenticatedOrchestration({store:persistentMissionMemory,ownerId:req.bayeIdentity.subject,missionId,tasks,run:async({priorMemory,missionId})=>{
-          await checkpointSession.initialized();
-          return runBayeOrchestration({...missionOptions,priorMemory,missionId,checkpointSession});
-        }});
-      }catch(error){
-        if(error?.code==='MISSION_MEMORY_LOAD_FAILED')return res.status(503).json({error:'La mémoire persistante est indisponible. La mission n’a pas été lancée.'});
-        if(/ledger|checkpoint|révision|revision|journal/i.test(error?.message||''))return res.status(503).json({error:'Le journal durable de mission est indisponible. La mission a été interrompue sans relancer les tâches.'});
-        throw error;
-      }
-    }else result=await runBayeOrchestration({...missionOptions,priorMemory:req.body?.priorMemory??null,missionId:req.body?.missionId??null});
+    try{
+      result=await runAuthenticatedOrchestration({store:persistentMissionMemory,ownerId:req.bayeIdentity.subject,missionId,tasks,run:async({priorMemory,missionId})=>{
+        await checkpointSession.initialized();
+        return runBayeOrchestration({...missionOptions,priorMemory,missionId,checkpointSession});
+      }});
+    }catch(error){
+      if(error?.code==='MISSION_MEMORY_LOAD_FAILED')return res.status(503).json({error:'La mémoire persistante est indisponible. La mission n’a pas été lancée.'});
+      if(/ledger|checkpoint|révision|revision|journal/i.test(error?.message||''))return res.status(503).json({error:'Le journal durable de mission est indisponible. La mission a été interrompue sans relancer les tâches.'});
+      throw error;
+    }
+    result.executionAuthorization={status:'consumed',missionId:authorization.missionId,scopes:authorization.scopes,oneTimeUse:true};
     res.status(result.status==='succeeded'?200:502).json(result);
   }catch(err){
+    if(err?.code==='EXECUTION_APPROVAL_NOT_CONFIGURED'||err?.code==='EXECUTION_APPROVAL_STORE_FAILED')return res.status(503).json({error:'Le contrôle durable des approbations est indisponible. Exécution refusée.'});
+    if(err?.code==='EXECUTION_APPROVAL_REPLAY'||err?.code==='EXECUTION_APPROVAL_INVALID')return res.status(403).json({error:'L’approbation est invalide, expirée, déjà utilisée ou ne correspond pas à cette mission.'});
     const message=err?.message||'Mission invalide.';
-    const clientError=/tâche|graphe|budget|dépendance|rôle|objectif|limite|configuration|profondeur|mission|mémoire/i.test(message);
+    const clientError=/tâche|graphe|budget|dépendance|rôle|objectif|limite|configuration|profondeur|mission|mémoire|approbation/i.test(message);
     res.status(clientError?400:502).json({error:clientError?message:'BAYE n’a pas pu terminer la mission multi-agents.'});
   }
 });

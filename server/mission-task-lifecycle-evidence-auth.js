@@ -23,7 +23,7 @@ function safeEqualHex(left,right){
 }
 /** Creates the authorization callback expected by the v6.0 evidence writer. */
 export function createSignedLifecycleEvidenceAuthorizer({keys,nonceStore,now=()=>Date.now(),maxAgeMs=30000}={}){
- if(!keys||typeof keys!=='object'||Array.isArray(keys))throw new TypeError('A lifecycle signing-key map is required.');
+ if(!keys||typeof keys!=='object'||Array.isArray(keys)||Object.keys(keys).length===0||Object.entries(keys).some(([id,secret])=>!IDENTIFIER.test(id)||typeof secret!=='string'||Buffer.byteLength(secret)<32))throw new TypeError('A lifecycle signing-key map with valid key IDs and secrets is required.');
  if(!nonceStore||typeof nonceStore.consume!=='function')throw new TypeError('An atomic lifecycle nonce store is required.');
  if(typeof now!=='function')throw new TypeError('A clock function is required.');
  if(!Number.isSafeInteger(maxAgeMs)||maxAgeMs<1000||maxAgeMs>300000)throw new TypeError('maxAgeMs must be between 1000 and 300000.');

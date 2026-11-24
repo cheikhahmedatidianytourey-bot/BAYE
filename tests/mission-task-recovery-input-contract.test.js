@@ -3,22 +3,22 @@ import assert from 'node:assert/strict';
 import { validateMissionTaskRecoveryInput } from '../server/mission-task-recovery-input-contract.js';
 
 const valid={
- status:'running',leaseExpired:true,replaySafe:true,checkpointValid:true,
- sideEffectsUncertain:false,recoveryAttempts:0,maxRecoveryAttempts:3,
  ownerId:'a'.repeat(64),missionId:'mission_123',taskId:'task_1',
- claimOwner:'worker-1',idempotencyKey:'mission_123:task_1:v1',leaseMs:30000
+ claimOwner:'worker-1',idempotencyKey:'mission_123:task_1:v1',leaseMs:30000,
+ status:'completed',leaseExpired:false,replaySafe:false,checkpointValid:false,
+ sideEffectsUncertain:true,recoveryAttempts:99,maxRecoveryAttempts:1
 };
-test('normalizes valid explicit recovery envelope',()=>{
+test('normalizes only request identity and lease envelope',()=>{
  const result=validateMissionTaskRecoveryInput(valid);
- assert.equal(result.status,'running');assert.equal(result.sideEffectsUncertain,false);
+ assert.deepEqual(result,{ownerId:valid.ownerId,missionId:valid.missionId,taskId:valid.taskId,claimOwner:valid.claimOwner,idempotencyKey:valid.idempotencyKey,leaseMs:valid.leaseMs});
  assert.ok(Object.isFrozen(result));
 });
-test('fails closed when a safety boolean is missing',()=>{
- const input={...valid};delete input.sideEffectsUncertain;
- assert.throws(()=>validateMissionTaskRecoveryInput(input),/explicitly boolean/);
+test('caller-supplied safety and state fields are not normalized or trusted',()=>{
+ const result=validateMissionTaskRecoveryInput(valid);
+ for(const key of ['status','leaseExpired','replaySafe','checkpointValid','sideEffectsUncertain','recoveryAttempts','maxRecoveryAttempts'])assert.equal(Object.hasOwn(result,key),false);
 });
-test('rejects malformed identity and budgets',()=>{
+test('rejects malformed identity and lease',()=>{
  assert.throws(()=>validateMissionTaskRecoveryInput({...valid,ownerId:'not-hashed'}),/namespace is invalid/);
- assert.throws(()=>validateMissionTaskRecoveryInput({...valid,maxRecoveryAttempts:101}),/between 1 and 100/);
- assert.throws(()=>validateMissionTaskRecoveryInput({...valid,recoveryAttempts:-1}),/non-negative integer/);
+ assert.throws(()=>validateMissionTaskRecoveryInput({...valid,leaseMs:0}),/leaseMs/);
+ assert.throws(()=>validateMissionTaskRecoveryInput({...valid,missionId:'bad id'}),/Mission identifier/);
 });

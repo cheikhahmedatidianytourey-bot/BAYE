@@ -103,3 +103,17 @@ test('Gateway HTTP fails closed when service authentication is not configured', 
   const response = await fetch(gateway.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
   assert.equal(response.status, 503);
 });
+
+test('Gateway HTTP rejects non-JSON content before authenticating a request', async t => {
+  const consumed = new Set();
+  const gateway = await startGateway({ authenticateServiceRequest: makeAuthenticator(consumed) });
+  t.after(() => gateway.close());
+  const body = Buffer.from('this is not JSON');
+  const headers = {
+    ...signedHeaders({ body, nonce: 'nonce_http_nonjson_0001' }),
+    'content-type': 'text/plain'
+  };
+  const response = await fetch(gateway.url, { method: 'POST', headers, body });
+  assert.equal(response.status, 415);
+  assert.equal(consumed.has('nonce_http_nonjson_0001'), false);
+});

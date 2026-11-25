@@ -4,6 +4,10 @@
 
 Architecture decision record and implementation boundary for Phase G. This document does not claim that PostgreSQL persistence, distributed execution, native media generation, or photorealistic quality are implemented.
 
+## CI validation
+
+Pull requests targeting `baye-v6-phase-f-multi-tenant-isolation` are included in the repository's BAYE CI workflow. The expected checks are backend tests (`npm test`) and frontend build (`npm run build`).
+
 ## Product objective
 
 BAYE AI CORE is intended to become a multimodal intelligence and execution platform. The long-term engine must coordinate reasoning, planning, specialized agents, durable memory, controlled tools, independent verification, and image/video creation. Media generation is a first-class workload, not an unrelated add-on.

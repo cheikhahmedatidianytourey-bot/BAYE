@@ -19,6 +19,7 @@ import { readJsonLimited } from './ai/bounded-json.js';
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
 import {createMissionRouter} from './mission-api.js';
+import {createMissionAuthenticator,parseMissionTokenRecords} from './mission-auth.js';
 import {MissionStore} from './mission-store.js';
 import {MissionWorker} from './mission-worker.js';
 
@@ -62,7 +63,8 @@ function secureBearerMatch(req,secret){
 
 
 // BAYE V6 Mission API — authenticated, bounded AI text tasks; no arbitrary tools or external actions.
-const missionToken=process.env.BAYE_MISSION_TOKEN;
+const missionTokenRecords=parseMissionTokenRecords(process.env.BAYE_MISSION_USER_TOKENS);
+const missionAuthenticator=missionTokenRecords.length?createMissionAuthenticator({tokenRecords:missionTokenRecords}):null;
 const missionDirectory=process.env.BAYE_MISSION_DIRECTORY||'/var/data/baye-missions';
 const missionStore=new MissionStore({directory:missionDirectory});
 await missionStore.init();
@@ -77,7 +79,7 @@ const missionWorker=new MissionWorker({store:missionStore,maxTaskAttempts:2,exec
   ],max_tokens:1800,temperature:0.3});
   return String(response.piece||'').slice(0,1800);
 }});
-app.use('/api/missions',createMissionRouter({store:missionStore,worker:missionWorker,token:missionToken,directory:missionDirectory}));
+app.use('/api/missions',createMissionRouter({store:missionStore,worker:missionWorker,authenticate:missionAuthenticator}));
 
 // BAYE Memory Engine: all write/search access is protected by a separately configured token.
 const memoryEngine=new MemoryEngine();

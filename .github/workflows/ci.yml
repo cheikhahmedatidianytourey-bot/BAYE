@@ -9,6 +9,7 @@ on:
       - main
       - baye-v6-audit-hardening-phase-candidate
       - baye-v6-phase-c-worker-runtime
+      - baye-v6-phase-d-worker-api
 
 jobs:
   verify:

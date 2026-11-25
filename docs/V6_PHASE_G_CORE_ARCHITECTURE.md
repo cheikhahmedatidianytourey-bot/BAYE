@@ -52,6 +52,50 @@ Independent verification, audit and result delivery
 
 The orchestrator should depend on stable interfaces, not on a single model vendor or storage implementation.
 
+
+## BAYE Engine — universal capability and evolution strategy
+
+The engine is designed to support a broad and continually expanding capability surface through interchangeable adapters and a capability registry—not by assuming one provider or model can do everything.
+
+### Capability families to accommodate
+- **Language and reasoning:** conversational, instruction following, structured output, long-context tasks, multilingual tasks, reasoning/planning profiles where provider APIs expose them.
+- **Research and knowledge work:** web/search adapters, retrieval, citations, document parsing, synthesis and fact-check workflows.
+- **Software engineering:** code generation, repository inspection, patch planning, test execution in controlled environments, debugging and review.
+- **Data and analysis:** structured data ingestion, calculations, analysis, visualization and file export through safe tools.
+- **Image:** text-to-image, editing, variations, reference-image conditioning and image understanding.
+- **Video:** text/image-to-video, clip editing or transformations where supported, temporal/scene continuity controls and evaluation.
+- **Audio and voice:** speech recognition, transcription, text-to-speech, voice interaction, audio understanding and audio generation where adapters support them.
+- **Multimodal input/output:** combinations of text, images, audio, video and files within one task, subject to model and provider limits.
+- **Agentic execution:** bounded task decomposition, agent delegation, tool execution, checkpoints, result verification and recovery.
+- **Future specialized capabilities:** new model modalities, spatial/3D, simulation or other interfaces as they mature, without destabilizing the core.
+
+### Capability registry and model router
+Maintain a versioned registry describing each adapter/model's supported operations, modalities, context/output limits, tool support, latency characteristics, availability, quality evaluation results, pricing metadata, policy restrictions and version identifiers. Metadata must be sourced and refreshed; unknown capabilities remain unknown.
+
+Routing should select a provider/model by task requirements, user-selected quality/speed/cost profile, verified capability, policy, quota and availability. Never route based solely on marketing claims or a model name. The user-facing engine should abstract provider-specific APIs and preserve portable task/result formats.
+
+### Provider lifecycle and upgrades
+- Keep adapter contracts and conformance tests versioned.
+- Add new providers/models behind adapters; do not couple mission logic to vendor-specific formats.
+- Track deprecations, API changes, model version changes and compatibility.
+- Use staged rollouts, regression evaluations and rollback-ready configuration.
+- Permit configured fallback only within explicit budget, privacy, safety and user-consent constraints.
+- Offer profile controls such as balanced, quality-first, speed-first and cost-conscious, with transparent tradeoffs and no false guarantees.
+- Store provider/model/version provenance per task to support debugging and evaluation.
+
+### Engine execution pipeline
+1. Parse the request and attachments; classify intent, modalities, constraints and risk.
+2. Build a task plan and choose required capabilities.
+3. Check permissions, privacy boundaries, budgets and resource limits.
+4. Route subtasks to qualified adapters and/or specialized agents.
+5. Execute with durable checkpoints, bounded retries and cancellation.
+6. Verify outputs using independent checks where practical; mark uncertainty and failures.
+7. Deliver the result with provenance, status and optional user feedback.
+8. Record privacy-safe evaluation signals for future quality improvement; updates require review and controlled rollout.
+
+### Acceptance principle
+BAYE should be extensible to future AI modes, but must not claim it can operate every current or future AI capability automatically. Each capability is considered available only after its adapter, configuration, permission controls, evaluation and operational checks are implemented and verified.
+
 ## Phase G implementation sequence
 
 ### G1 — Durable mission persistence

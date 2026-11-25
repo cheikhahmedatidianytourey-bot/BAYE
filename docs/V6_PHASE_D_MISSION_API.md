@@ -14,6 +14,10 @@ This branch adds an API layer for the V6 mission engine, durable store, and boun
 - `GET /api/missions/:id` — inspect mission.
 - `POST /api/missions/:id/run` — execute one ready task per call.
 
+## Validation
+- GitHub Actions CI is configured to run for pull requests targeting the stacked V6 Phase C and audit-hardening branches, in addition to `main`.
+- A workflow run must appear and pass before this phase is considered validated.
+
 ## Safety / limitations
 - This API is single-process and intended for one instance only; no distributed locks, lease, scheduler, or multi-instance coordination.
 - Tasks are text-only AI processing; no arbitrary tools, browser, shell, account access, purchases, posting, or external side-effect execution is enabled.

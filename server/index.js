@@ -18,7 +18,7 @@ import { validatePublicImageUrl } from './ai/image-url-validation.js';
 import { readJsonLimited } from './ai/bounded-json.js';
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
-import {createMission,validateMission} from './mission-engine.js';
+import {createMissionRouter} from './mission-api.js';
 import {MissionStore} from './mission-store.js';
 import {MissionWorker} from './mission-worker.js';
 
@@ -77,37 +77,7 @@ const missionWorker=new MissionWorker({store:missionStore,maxTaskAttempts:2,exec
   ],max_tokens:1800,temperature:0.3});
   return String(response.piece||'').slice(0,1800);
 }});
-const missionLimiter=rateLimit({windowMs:60_000,max:10,standardHeaders:true,legacyHeaders:false});
-function requireMissionAuth(req,res,next){
-  if(typeof missionToken!=='string'||missionToken.length<32)return res.status(503).json({error:'Mission API token is not securely configured.'});
-  if(!secureBearerMatch(req,missionToken))return res.status(401).json({error:'Unauthorized'});
-  next();
-}
-function publicMission(m){return {id:m.id,goal:m.goal,status:m.status,createdAt:m.createdAt,updatedAt:m.updatedAt,lastHeartbeatAt:m.lastHeartbeatAt,tasks:m.tasks,checkpoint:m.checkpoint,retry:m.retry,audit:m.audit};}
-app.get('/api/missions/status',requireMissionAuth,async(_req,res)=>res.json({enabled:true,execution:'bounded AI text tasks only',storage:missionDirectory,limits:{tasksPerMission:10,descriptionChars:1000,runRequestsPerMinute:10,maxAttempts:2},externalActions:false}));
-app.post('/api/missions',missionLimiter,requireMissionAuth,async(req,res)=>{
-  try{
-    const {goal,tasks,constraints={}}=req.body||{};
-    if(typeof goal!=='string'||!goal.trim()||goal.length>3000)return res.status(400).json({error:'Goal must be 1-3000 characters.'});
-    if(!Array.isArray(tasks)||tasks.length<1||tasks.length>10)return res.status(400).json({error:'Provide 1-10 tasks.'});
-    if(tasks.some(t=>!t||typeof t.description!=='string'||!t.description.trim()||t.description.length>1000))return res.status(400).json({error:'Each task description must be 1-1000 characters.'});
-    if(!constraints||typeof constraints!=='object'||Array.isArray(constraints))return res.status(400).json({error:'Invalid constraints.'});
-    const mission=createMission({goal,ownerRef:'api-user',constraints,tasks});
-    await missionStore.create(mission);res.status(201).json(publicMission(mission));
-  }catch(err){res.status(400).json({error:err.message||'Invalid mission.'});}
-});
-app.get('/api/missions',requireMissionAuth,async(_req,res)=>{
-  try{const items=(await missionStore.list()).filter(m=>m.ownerRef==='api-user').map(publicMission);res.json({items});}
-  catch(_){res.status(500).json({error:'Mission list unavailable.'});}
-});
-app.get('/api/missions/:id',requireMissionAuth,async(req,res)=>{
-  try{const m=await missionStore.get(req.params.id);if(!m||m.ownerRef!=='api-user')return res.status(404).json({error:'Mission not found.'});res.json(publicMission(m));}
-  catch(_){res.status(400).json({error:'Invalid mission ID.'});}
-});
-app.post('/api/missions/:id/run',missionLimiter,requireMissionAuth,async(req,res)=>{
-  try{const m=await missionStore.get(req.params.id);if(!m||m.ownerRef!=='api-user')return res.status(404).json({error:'Mission not found.'});const result=await missionWorker.runOne(m.id);const updated=await missionStore.get(m.id);res.json({worker:result,mission:publicMission(updated)});}
-  catch(err){res.status(500).json({error:err.message||'Mission execution failed.'});}
-});
+app.use('/api/missions',createMissionRouter({store:missionStore,worker:missionWorker,token:missionToken,directory:missionDirectory}));
 
 // BAYE Memory Engine: all write/search access is protected by a separately configured token.
 const memoryEngine=new MemoryEngine();

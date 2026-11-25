@@ -11,13 +11,13 @@ import {MissionWorker} from './mission-worker.js';
 
 const TOKEN='test-mission-token-that-is-at-least-32-characters-long';
 
-async function setup(t){
+async function setup(t,{rateLimiter=null,workerOverride=null}={}){
   const directory=await mkdtemp(join(tmpdir(),'baye-api-'));
   const store=await new MissionStore({directory}).init();
-  const worker=new MissionWorker({store,maxTaskAttempts:2,executeTask:async task=>'done:'+task.id});
+  const worker=workerOverride||new MissionWorker({store,maxTaskAttempts:2,executeTask:async task=>'done:'+task.id});
   const app=express();
   app.use(express.json({limit:'20kb'}));
-  app.use('/api/missions',createMissionRouter({store,worker,token:TOKEN}));
+  app.use('/api/missions',createMissionRouter({store,worker,token:TOKEN,rateLimiter}));
   const server=app.listen(0,'127.0.0.1');
   await new Promise((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});
   const address=server.address();
@@ -93,4 +93,44 @@ test('mission API refuses an insecurely configured token',async t=>{
   t.after(async()=>{await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});});
   const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/missions/status',{headers:{authorization:'Bearer short'}});
   assert.equal(response.status,503);
+});
+
+
+test('mission API omits internal errors, results, audit and storage paths from public responses',async t=>{
+  const {base}=await setup(t);
+  const created=await request(base,'',{method:'POST',body:{goal:'projection test',tasks:[{id:'safe-task',description:'safe description'}]}});
+  const mission=await created.json();
+  const stored=await (await request(base,'/'+mission.id)).json();
+  const record={...stored,ownerRef:'api-user'};
+  const raw=await (await import('node:fs/promises')).readFile;
+  void raw;
+  assert.equal('ownerRef' in stored,false);
+  assert.equal('checkpoint' in stored,false);
+  assert.equal('retry' in stored,false);
+  assert.equal('audit' in stored,false);
+  assert.equal('resultRef' in stored.tasks[0],false);
+  assert.equal('error' in stored.tasks[0],false);
+  const status=await (await request(base,'/status')).json();
+  assert.equal(typeof status.storage,'string');
+  assert.equal(status.storage.includes('/'),false);
+  void record;
+});
+
+test('unauthenticated requests do not consume the rate limiter',async t=>{
+  let limiterCalls=0;
+  const rateLimiter=(_req,_res,next)=>{limiterCalls++;next();};
+  const {base}=await setup(t,{rateLimiter});
+  assert.equal((await request(base,'',{method:'POST',token:'invalid',body:{goal:'x',tasks:[{description:'x'}]}})).status,401);
+  assert.equal(limiterCalls,0);
+  assert.equal((await request(base,'',{method:'POST',body:{goal:'valid',tasks:[{description:'valid task'}]}})).status,201);
+  assert.equal(limiterCalls,1);
+});
+
+test('mission API returns conflict when a mission is already being processed',async t=>{
+  const {base}=await setup(t,{workerOverride:{runOne:async missionId=>({status:'busy',missionId})}});
+  const created=await request(base,'',{method:'POST',body:{goal:'busy test',tasks:[{id:'busy-task',description:'wait'}]}});
+  const mission=await created.json();
+  const response=await request(base,'/'+mission.id+'/run',{method:'POST'});
+  assert.equal(response.status,409);
+  assert.equal((await response.json()).error,'Mission is already being processed.');
 });

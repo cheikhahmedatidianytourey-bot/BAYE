@@ -90,6 +90,7 @@ app.post('/api/missions',missionLimiter,requireMissionAuth,async(req,res)=>{
     const {goal,tasks,constraints={}}=req.body||{};
     if(typeof goal!=='string'||!goal.trim()||goal.length>3000)return res.status(400).json({error:'Goal must be 1-3000 characters.'});
     if(!Array.isArray(tasks)||tasks.length<1||tasks.length>10)return res.status(400).json({error:'Provide 1-10 tasks.'});
+    if(tasks.some(t=>!t||typeof t.description!=='string'||!t.description.trim()||t.description.length>1000))return res.status(400).json({error:'Each task description must be 1-1000 characters.'});
     if(!constraints||typeof constraints!=='object'||Array.isArray(constraints))return res.status(400).json({error:'Invalid constraints.'});
     const mission=createMission({goal,ownerRef:'api-user',constraints,tasks});
     await missionStore.create(mission);res.status(201).json(publicMission(mission));

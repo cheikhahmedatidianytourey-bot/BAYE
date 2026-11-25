@@ -32,7 +32,7 @@ export class MissionStore {
   records.sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id));return clone(records);
  }
  async _writeAtomic(file,mission){const temp=file+'.'+randomUUID()+'.tmp';try{
-  await (await import('node:fs/promises')).writeFile(temp,JSON.stringify(mission,null,2)+'\n',{encoding:'utf8',flag:'wx'});
+  await writeFile(temp,JSON.stringify(mission,null,2)+'\n',{encoding:'utf8',flag:'wx'});
   await rename(temp,file);
  }catch(error){await rm(temp,{force:true}).catch(()=>{});throw error;}}
 }

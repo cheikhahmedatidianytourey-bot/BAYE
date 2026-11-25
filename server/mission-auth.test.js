@@ -20,7 +20,7 @@ test('mission authenticator maps distinct bearer tokens to distinct stable user 
   const request=token=>({get:name=>name==='authorization'?'Bearer '+token:''});
   assert.equal(authenticate(request(TOKEN_A)).userId,'account-a');
   assert.equal(authenticate(request(TOKEN_B)).userId,'account-b');
-  assert.equal(authenticate(request('unknown-token-that-is-long-enough-000')).userId,undefined);
+  assert.equal(authenticate(request('unknown-token-that-is-long-enough-000')),null);
   assert.equal(authenticate({get:()=>''}),null);
 });
 

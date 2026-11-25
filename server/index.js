@@ -18,6 +18,10 @@ import { validatePublicImageUrl } from './ai/image-url-validation.js';
 import { readJsonLimited } from './ai/bounded-json.js';
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
+import {createMissionRouter} from './mission-api.js';
+import {MissionStore} from './mission-store.js';
+import {MissionWorker} from './mission-worker.js';
+
 
 const app = express();
 app.set('trust proxy', 1);
@@ -55,6 +59,25 @@ function secureBearerMatch(req,secret){
   const expected='Bearer '+secret;
   return supplied.length===expected.length&&crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected));
 }
+
+
+// BAYE V6 Mission API — authenticated, bounded AI text tasks; no arbitrary tools or external actions.
+const missionToken=process.env.BAYE_MISSION_TOKEN;
+const missionDirectory=process.env.BAYE_MISSION_DIRECTORY||'/var/data/baye-missions';
+const missionStore=new MissionStore({directory:missionDirectory});
+await missionStore.init();
+const missionWorker=new MissionWorker({store:missionStore,maxTaskAttempts:2,executeTask:async(task,mission)=>{
+  const key=process.env.AI_API_KEY;
+  if(!key)throw new Error('AI provider not configured');
+  const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
+  const model=process.env.AI_MODEL||'gpt-4o-mini';
+  const response=await callAI({key,endpoint,model,messages:[
+    {role:'system',content:'Complete the described task using text only. Do not claim to perform external actions, access accounts, run code, browse, or change systems. Return a useful concise result.'},
+    {role:'user',content:'Mission goal: '+mission.goal+'\nTask: '+task.description+'\nConstraints: '+JSON.stringify(mission.constraints)}
+  ],max_tokens:1800,temperature:0.3});
+  return String(response.piece||'').slice(0,1800);
+}});
+app.use('/api/missions',createMissionRouter({store:missionStore,worker:missionWorker,token:missionToken,directory:missionDirectory}));
 
 // BAYE Memory Engine: all write/search access is protected by a separately configured token.
 const memoryEngine=new MemoryEngine();

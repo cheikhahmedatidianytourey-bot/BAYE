@@ -42,3 +42,15 @@ test('serialized concurrent creates do not overwrite one another',async()=>{
   assert.equal((await store.list()).length,2);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+test('store listing fails closed on corrupt mission JSON',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'baye-missions-'));
+ try{
+  const store=await new MissionStore({directory:dir}).init();
+  const mission=createMission({goal:'Corrupt file'});
+  await store.create(mission);
+  const {writeFile}=await import('node:fs/promises');
+  await writeFile(join(dir,mission.id+'.json'),'not-json');
+  await assert.rejects(()=>store.list());
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

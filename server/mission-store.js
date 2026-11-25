@@ -1,6 +1,6 @@
 // BAYE V6 Phase B — durable mission record storage (filesystem-backed).
 // Each mission is stored as an individual JSON file and written via atomic rename.
-import {mkdir,readFile,readdir,rename,rm} from 'node:fs/promises';
+import {mkdir,readFile,readdir,rename,rm,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {validateMission} from './mission-engine.js';
@@ -32,7 +32,7 @@ export class MissionStore {
   records.sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id));return clone(records);
  }
  async _writeAtomic(file,mission){const temp=file+'.'+randomUUID()+'.tmp';try{
-  await (await import('node:fs/promises')).writeFile(temp,JSON.stringify(mission,null,2)+'\n',{encoding:'utf8',flag:'wx'});
+  await writeFile(temp,JSON.stringify(mission,null,2)+'\n',{encoding:'utf8',flag:'wx'});
   await rename(temp,file);
  }catch(error){await rm(temp,{force:true}).catch(()=>{});throw error;}}
 }

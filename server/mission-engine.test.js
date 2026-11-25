@@ -39,3 +39,12 @@ test('task transitions reject invalid transition attempts',()=>{
 test('Phase A status is honest about persistence being absent',()=>{
  assert.equal(getMissionEnginePhaseAStatus().persistence,'not implemented in Phase A');
 });
+
+test('rejects cyclic dependencies',()=>{
+ assert.throws(()=>createMission({goal:'cycle',tasks:[{id:'a',description:'A',dependencies:['b']},{id:'b',description:'B',dependencies:['a']}]}),/cycle/);
+});
+test('rejects inconsistent checkpoint and malformed constraints',()=>{
+ const m=createMission({goal:'checkpoint integrity',tasks:[{id:'t',description:'task'}]});
+ assert.throws(()=>validateMission({...m,constraints:null}),/Invalid constraints/);
+ assert.throws(()=>validateMission({...m,checkpoint:{completedTaskIds:['unknown'],lastTaskId:null}}),/Checkpoint/);
+});

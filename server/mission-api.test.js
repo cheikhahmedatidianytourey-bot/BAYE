@@ -23,7 +23,7 @@ async function setup(t,{rateLimiter=null,workerOverride=null}={}){
   const address=server.address();
   const base='http://127.0.0.1:'+address.port+'/api/missions';
   t.after(async()=>{await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});});
-  return {base};
+  return {base,store};
 }
 
 async function request(base,path='',{method='GET',token=TOKEN,body}={}){
@@ -97,23 +97,25 @@ test('mission API refuses an insecurely configured token',async t=>{
 
 
 test('mission API omits internal errors, results, audit and storage paths from public responses',async t=>{
-  const {base}=await setup(t);
+  const {base,store}=await setup(t);
   const created=await request(base,'',{method:'POST',body:{goal:'projection test',tasks:[{id:'safe-task',description:'safe description'}]}});
   const mission=await created.json();
-  const stored=await (await request(base,'/'+mission.id)).json();
-  const record={...stored,ownerRef:'api-user'};
-  const raw=await (await import('node:fs/promises')).readFile;
-  void raw;
-  assert.equal('ownerRef' in stored,false);
-  assert.equal('checkpoint' in stored,false);
-  assert.equal('retry' in stored,false);
-  assert.equal('audit' in stored,false);
-  assert.equal('resultRef' in stored.tasks[0],false);
-  assert.equal('error' in stored.tasks[0],false);
+  const persisted=await store.get(mission.id);
+  persisted.tasks[0].resultRef='sensitive provider output';
+  persisted.tasks[0].error='internal provider detail';
+  persisted.audit.push({event:'secret-internal-event',at:new Date().toISOString()});
+  persisted.retry.lastError='sensitive retry detail';
+  await store.save(persisted);
+  const response=await (await request(base,'/'+mission.id)).json();
+  assert.equal('ownerRef' in response,false);
+  assert.equal('checkpoint' in response,false);
+  assert.equal('retry' in response,false);
+  assert.equal('audit' in response,false);
+  assert.equal('resultRef' in response.tasks[0],false);
+  assert.equal('error' in response.tasks[0],false);
   const status=await (await request(base,'/status')).json();
-  assert.equal(typeof status.storage,'string');
-  assert.equal(status.storage.includes('/'),false);
-  void record;
+  assert.equal(status.storage,'filesystem');
+  assert.equal(JSON.stringify(status).includes(store.directory),false);
 });
 
 test('unauthenticated requests do not consume the rate limiter',async t=>{

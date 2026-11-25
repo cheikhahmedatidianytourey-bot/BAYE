@@ -17,7 +17,7 @@ export class MissionWorker {
       if(!mission)return {status:'not_found',missionId};
       validateMission(mission);
       if(['completed','cancelled'].includes(mission.status))return {status:mission.status,missionId};
-      if(mission.status==='failed')mission=transitionMission(mission,'queued',{event:'worker_mission_requeued'});\n      if(mission.status==='queued'||mission.status==='paused')mission=transitionMission(mission,'running',{event:'worker_mission_started'});
+      if(mission.status==='failed')return {status:'failed',missionId};\n      if(mission.status==='queued'||mission.status==='paused')mission=transitionMission(mission,'running',{event:'worker_mission_started'});
       if(mission.status!=='running')return {status:mission.status,missionId};
       const now=new Date().toISOString();
       mission={...mission,lastHeartbeatAt:now,updatedAt:now};

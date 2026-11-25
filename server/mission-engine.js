@@ -25,6 +25,8 @@ const object = value => value!==null && typeof value==='object' && !Array.isArra
 export function createMission({goal,ownerRef=null,constraints={},tasks=[]}={}){
  if(typeof goal!=='string'||!goal.trim())throw new TypeError('Mission goal is required.');
  if(!Array.isArray(tasks))throw new TypeError('Mission tasks must be an array.');
+ if(!object(constraints))throw new TypeError('Mission constraints must be an object.');
+ if(ownerRef!==null&&typeof ownerRef!=='string')throw new TypeError('Mission ownerRef must be a string or null.');
  const now=new Date().toISOString();
  const mission={
   id:randomUUID(),schemaVersion:MISSION_SCHEMA_VERSION,ownerRef,
@@ -53,19 +55,30 @@ export function validateMission(mission){
  if(!MISSION_STATES.includes(mission.status))throw new Error('Invalid mission status.');
  if(!validIso(mission.createdAt)||!validIso(mission.updatedAt))throw new Error('Invalid mission timestamps.');
  if(mission.lastHeartbeatAt!==null&&!validIso(mission.lastHeartbeatAt))throw new Error('Invalid heartbeat timestamp.');
- if(!Array.isArray(mission.tasks)||!object(mission.checkpoint)||!Array.isArray(mission.checkpoint.completedTaskIds))throw new Error('Invalid tasks or checkpoint.');
+ if(!object(mission.constraints)||!Array.isArray(mission.tasks)||!object(mission.checkpoint)||!Array.isArray(mission.checkpoint.completedTaskIds))throw new Error('Invalid constraints, tasks or checkpoint.');
+ if(mission.ownerRef!==null&&typeof mission.ownerRef!=='string')throw new Error('Invalid mission ownerRef.');
  const ids=new Set();
  for(const task of mission.tasks){
   if(!object(task)||typeof task.id!=='string'||!task.id||ids.has(task.id))throw new Error('Invalid or duplicate task ID.');
   ids.add(task.id);
   if(!TASK_STATES.includes(task.status)||typeof task.description!=='string'||!task.description.trim())throw new Error('Invalid task record.');
-  if(!Array.isArray(task.dependencies)||task.dependencies.some(id=>typeof id!=='string'))throw new Error('Invalid task dependencies.');
+  if(!Array.isArray(task.dependencies)||task.dependencies.some(id=>typeof id!=='string')||new Set(task.dependencies).size!==task.dependencies.length)throw new Error('Invalid task dependencies.');
+  if(!validIso(task.createdAt)||!validIso(task.updatedAt))throw new Error('Invalid task timestamps.');
+  if(task.error!==null&&typeof task.error!=='string')throw new Error('Invalid task error.');
   if(task.dependencies.includes(task.id))throw new Error('Task cannot depend on itself.');
   if(!Number.isSafeInteger(task.order)||task.order<0||!Number.isSafeInteger(task.attempt)||task.attempt<0)throw new Error('Invalid task order or attempt counter.');
  }
  for(const task of mission.tasks)for(const dep of task.dependencies)if(!ids.has(dep))throw new Error('Task dependency references an unknown task.');
- if(!object(mission.retry)||!Number.isSafeInteger(mission.retry.attempt)||mission.retry.attempt<0)throw new Error('Invalid retry record.');
- if(!Array.isArray(mission.audit)||!Array.isArray(mission.approvals))throw new Error('Invalid audit or approvals.');
+ // Reject dependency cycles using a linear-time DFS traversal.
+ const taskById=new Map(mission.tasks.map(task=>[task.id,task]));
+ const visiting=new Set(),visited=new Set();
+ const visit=id=>{if(visiting.has(id))throw new Error('Task dependencies contain a cycle.');if(visited.has(id))return;visiting.add(id);for(const dep of taskById.get(id).dependencies)visit(dep);visiting.delete(id);visited.add(id);};
+ for(const id of ids)visit(id);
+ const completed=mission.tasks.filter(task=>task.status==='completed').map(task=>task.id);
+ if(new Set(mission.checkpoint.completedTaskIds).size!==mission.checkpoint.completedTaskIds.length||mission.checkpoint.completedTaskIds.some(id=>!ids.has(id))||completed.length!==mission.checkpoint.completedTaskIds.length||completed.some(id=>!mission.checkpoint.completedTaskIds.includes(id)))throw new Error('Checkpoint completed-task list is inconsistent.');
+ if(mission.checkpoint.lastTaskId!==null&&!ids.has(mission.checkpoint.lastTaskId))throw new Error('Checkpoint references an unknown task.');
+ if(!object(mission.retry)||!Number.isSafeInteger(mission.retry.attempt)||mission.retry.attempt<0|| (mission.retry.lastError!==null&&typeof mission.retry.lastError!=='string') || (mission.retry.nextRetryAt!==null&&!validIso(mission.retry.nextRetryAt)))throw new Error('Invalid retry record.');
+ if(!Array.isArray(mission.audit)||mission.audit.some(entry=>!object(entry)||typeof entry.event!=='string'||!validIso(entry.at))||!Array.isArray(mission.approvals)||mission.approvals.some(entry=>!object(entry)))throw new Error('Invalid audit or approvals.');
  return {valid:true,taskCount:mission.tasks.length};
 }
 export function transitionMission(mission,nextState,{event=null,now=new Date().toISOString()}={}){

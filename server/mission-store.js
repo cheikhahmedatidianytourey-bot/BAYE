@@ -1,6 +1,6 @@
 // BAYE V6 Phase B — durable mission record storage (filesystem-backed).
 // Each mission is stored as an individual JSON file and written via atomic rename.
-import {mkdir,readFile,readdir,rename,rm} from 'node:fs/promises';
+import {mkdir,readFile,readdir,rename,rm,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {validateMission} from './mission-engine.js';

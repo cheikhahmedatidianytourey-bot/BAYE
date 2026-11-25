@@ -3,6 +3,7 @@ import {createMissionMemory,validateMissionMemory} from './mission-memory.js';
 import {runSpecialistTasks} from './specialist-runtime.js';
 import {createSpecialistAIExecutor} from './ai/specialist-adapter.js';
 import {reviewOrchestrationResults} from './orchestration-review.js';
+import {verifyMissionExecution} from './mission-independent-verifier.js';
 
 const SERVICE_LIMITS=Object.freeze({maxTasks:5,maxDependenciesPerTask:4,maxTotalBudget:10,maxDepth:5});
 const MAX_REVIEW_INPUT=60000;
@@ -51,6 +52,7 @@ export async function runBayeOrchestration({tasks,complete,maxParallel=2,maxToke
  const checkpoint=checkpointSession?await checkpointSession.finish(runtime.status==='succeeded'?'succeeded':'failed'):null;
  const missionMemory=runtime.status==='succeeded'?createMissionMemory({missionId:activeMissionId,previous:validatedMemory,results:runtime.results}):validatedMemory;
  const deterministicReview=reviewOrchestrationResults({results:runtime.results,taskStates:runtime.taskStates});
+ const independentVerification=verifyMissionExecution({tasks:graph.tasks,results:runtime.results,taskStates:runtime.taskStates});
  const semanticReview=reviewMode==='semantic'&&runtime.status==='succeeded'
   ? await runSemanticReview({results:runtime.results,complete})
   : null;
@@ -63,6 +65,7 @@ export async function runBayeOrchestration({tasks,complete,maxParallel=2,maxToke
   taskStates:runtime.taskStates,
   missionMemory,
   review:{...deterministicReview,semantic:semanticReview},
+  independentVerification,
   execution:{started:runtime.execution.started,toolsInvoked:runtime.execution.toolsInvoked,externalActions:runtime.execution.externalActions,failed:runtime.execution.failed,parallelism:maxParallel},
   checkpoint:checkpoint?{status:'persisted',missionId:checkpointSession.missionId,revision:checkpoint.revision,sequence:checkpoint.sequence,graphDigest:checkpoint.graphDigest}:null,
   safety:{mode:'text_only_specialist_inference',toolsEnabled:false,externalActionsEnabled:false,independentFactVerification:false}

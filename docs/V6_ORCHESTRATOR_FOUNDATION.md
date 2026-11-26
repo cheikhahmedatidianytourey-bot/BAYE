@@ -1,14 +1,14 @@
 # BAYE V6 — Core Orchestrator Foundation
 
-This draft introduces a small, provider-neutral orchestration boundary; it is not yet the full durable mission engine.
+This draft introduces a provider-neutral orchestration boundary; it is not yet the full durable mission engine.
 
 ## Implemented in this draft
 - Injected planner, executor and policy gate (no implicit provider/tool execution).
-- Bounded task plans with unique IDs, required capability declarations, dependency validation and cycle detection.
-- Deterministic topological ordering.
+- Bounded task plans with unique trimmed IDs, required capability declarations, dependency validation and iterative cycle detection.
+- Deterministic topological ordering using the same configurable task bound as plan validation.
 - Sequential execution with dependency results passed to downstream tasks.
-- Abort signal checks and a policy gate before side effects.
-- Automated unit tests for plan validation, ordering, policy denial and cancellation.
+- Abort checks before and after planning, policy and each executor call.
+- Automated unit tests for validation, ordering, configured bounds, deep graphs, prototype-like IDs, policy and cancellation.
 
 ## Not implemented / not verified
 - Durable orchestration state, mission-repository integration, distributed leases/fencing, retries, recovery or checkpoint writes.

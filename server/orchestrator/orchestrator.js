@@ -1,5 +1,6 @@
 // BAYE Core Orchestrator foundation. Injected planner/executor/policy; no implicit tools or providers.
 import {validatePlan,topologicalOrder} from './plan.js';
+const abortIfRequested = signal => { if (signal?.aborted) throw signal.reason ?? new Error('Operation aborted.'); };
 export class CoreOrchestrator {
  constructor({planner,executor,policy,maxTasks=200}={}) {
   if(typeof planner!=='function'||typeof executor!=='function')throw new TypeError('Planner and executor must be explicitly injected.');
@@ -9,19 +10,24 @@ export class CoreOrchestrator {
  }
  async run({goal,context={},signal}={}) {
   if(typeof goal!=='string'||!goal.trim())throw new TypeError('A goal is required.');
-  if(signal?.aborted)throw signal.reason??new Error('Operation aborted.');
-  const plan=await this.planner({goal:goal.trim(),context,signal});
+  abortIfRequested(signal);
+  const normalizedGoal=goal.trim();
+  const plan=await this.planner({goal:normalizedGoal,context,signal});
+  abortIfRequested(signal);
   validatePlan(plan,{maxTasks:this.maxTasks});
-  const order=topologicalOrder(plan);
-  const authorization=await this.policy({goal,plan,context});
+  const order=topologicalOrder(plan,{maxTasks:this.maxTasks});
+  const authorization=await this.policy({goal:normalizedGoal,plan,context,signal});
+  abortIfRequested(signal);
   if(authorization!==true&&authorization?.allowed!==true)throw new Error('Plan rejected by policy gate.');
-  const results={},events=[];
+  const results=Object.create(null),events=[];
   for(const task of order){
-   if(signal?.aborted)throw signal.reason??new Error('Operation aborted.');
-   const dependencyResults={};for(const dep of task.dependencies)dependencyResults[dep]=results[dep];
-   const result=await this.executor({task:structuredClone(task),goal,context,dependencyResults,signal});
+   abortIfRequested(signal);
+   const dependencyResults=Object.create(null);
+   for(const dep of task.dependencies)dependencyResults[dep]=results[dep];
+   const result=await this.executor({task:structuredClone(task),goal:normalizedGoal,context,dependencyResults,signal});
+   abortIfRequested(signal);
    results[task.id]=result;events.push({taskId:task.id,status:'completed'});
   }
-  return {status:'completed',goal,plan:structuredClone(plan),results,events};
+  return {status:'completed',goal:normalizedGoal,plan:structuredClone(plan),results,events};
  }
 }

@@ -23,6 +23,12 @@ export class PostgresMissionStore {
  }
  // Schema changes are deliberately explicit; init does not run migrations.
  async init(){return this;}
+ // Read-only startup preflight. This deliberately never applies migrations.
+ async verifySchema(){
+  await this.pool.query('SELECT mission_id,owner_id,record_json,version FROM baye_missions LIMIT 0');
+  await this.pool.query('SELECT mission_id,owner_id,task_id,task_order,status,dependencies,attempt,updated_at,record_json FROM baye_mission_tasks LIMIT 0');
+  return true;
+ }
  async create(mission){
   validateMission(mission);
   const client=await this.pool.connect();let began=false;

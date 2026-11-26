@@ -4,7 +4,7 @@ import {PostgresMissionStore} from './postgres-mission-store.js';
 
 test('Postgres schema verification checks required mission and task columns without migrating',async()=>{
  const calls=[];
- const pool={query:async(sql)=>{calls.push(sql);return {rows:[]};}};
+ const pool={query:async(sql)=>{calls.push(sql);return {rows:[]};},connect:async()=>{throw new Error('connect should not be used by schema verification');}};
  const store=new PostgresMissionStore({pool});
  assert.equal(await store.verifySchema(),true);
  assert.equal(calls.length,2);
@@ -14,7 +14,7 @@ test('Postgres schema verification checks required mission and task columns with
 });
 
 test('Postgres schema verification fails when required tables are unavailable',async()=>{
- const pool={query:async()=>{throw new Error('relation does not exist');}};
+ const pool={query:async()=>{throw new Error('relation does not exist');},connect:async()=>{throw new Error('connect should not be used by schema verification');}};
  const store=new PostgresMissionStore({pool});
  await assert.rejects(store.verifySchema(),/relation does not exist/);
 });

@@ -10,7 +10,7 @@ test('rejects invalid and non-string timestamps throughout mission and tasks',()
 test('rejects task errors with non-string values and invalid retry counters',()=>{
  const m=createMission({goal:'record integrity'});
  assert.throws(()=>validateMission({...m,retry:{attempt:-1,lastError:null,nextRetryAt:null}}),/retry/);
- assert.throws(()=>validateMission({...m,tasks:[{id:'t',description:'task',status:'pending',dependencies:[],order:0,attempt:0,resultRef:null,error:42,createdAt:m.createdAt,updatedAt:m.updatedAt}]}),/task record/);
+ assert.throws(()=>validateMission({...m,tasks:[{id:'t',description:'task',status:'pending',dependencies:[],order:0,attempt:0,resultRef:null,error:42,createdAt:m.createdAt,updatedAt:m.updatedAt}]}),/Invalid task error/);
 });
 test('rejects inconsistent checkpoint when a task is not completed',()=>{
  const m=createMission({goal:'checkpoint integrity',tasks:[{id:'t',description:'task'}]});

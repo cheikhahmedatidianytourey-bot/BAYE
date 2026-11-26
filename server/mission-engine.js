@@ -56,6 +56,8 @@ export function validateMission(mission){
  if(!validIso(mission.createdAt)||!validIso(mission.updatedAt))throw new Error('Invalid mission timestamps.');
  if(mission.lastHeartbeatAt!==null&&!validIso(mission.lastHeartbeatAt))throw new Error('Invalid heartbeat timestamp.');
  if(!object(mission.constraints)||!Array.isArray(mission.tasks)||!object(mission.checkpoint)||!Array.isArray(mission.checkpoint.completedTaskIds))throw new Error('Invalid constraints, tasks or checkpoint.');
+ if(JSON.stringify(mission.constraints).length>65536)throw new Error('Mission constraints exceed size limit.');
+ if(mission.audit?.length>10000||mission.approvals?.length>1000)throw new Error('Mission audit or approvals exceed size limit.');
  if(mission.ownerRef!==null&&typeof mission.ownerRef!=='string')throw new Error('Invalid mission ownerRef.');
  const ids=new Set();
  for(const task of mission.tasks){
@@ -69,11 +71,13 @@ export function validateMission(mission){
   if(!Number.isSafeInteger(task.order)||task.order<0||!Number.isSafeInteger(task.attempt)||task.attempt<0)throw new Error('Invalid task order or attempt counter.');
  }
  for(const task of mission.tasks)for(const dep of task.dependencies)if(!ids.has(dep))throw new Error('Task dependency references an unknown task.');
- // Reject dependency cycles using a linear-time DFS traversal.
- const taskById=new Map(mission.tasks.map(task=>[task.id,task]));
- const visiting=new Set(),visited=new Set();
- const visit=id=>{if(visiting.has(id))throw new Error('Task dependencies contain a cycle.');if(visited.has(id))return;visiting.add(id);for(const dep of taskById.get(id).dependencies)visit(dep);visiting.delete(id);visited.add(id);};
- for(const id of ids)visit(id);
+ // Reject dependency cycles iteratively (Kahn's algorithm), avoiding stack overflow on deep graphs.
+ const dependents=new Map([...ids].map(id=>[id,[]]));
+ const indegree=new Map([...ids].map(id=>[id,0]));
+ for(const task of mission.tasks){indegree.set(task.id,task.dependencies.length);for(const dep of task.dependencies)dependents.get(dep).push(task.id);}
+ const ready=[...ids].filter(id=>indegree.get(id)===0);let visitedCount=0;
+ while(ready.length){const id=ready.pop();visitedCount++;for(const child of dependents.get(id)){const next=indegree.get(child)-1;indegree.set(child,next);if(next===0)ready.push(child);}}
+ if(visitedCount!==ids.size)throw new Error('Task dependencies contain a cycle.');
  const completed=mission.tasks.filter(task=>task.status==='completed').map(task=>task.id);
  if(new Set(mission.checkpoint.completedTaskIds).size!==mission.checkpoint.completedTaskIds.length||mission.checkpoint.completedTaskIds.some(id=>!ids.has(id))||completed.length!==mission.checkpoint.completedTaskIds.length||completed.some(id=>!mission.checkpoint.completedTaskIds.includes(id)))throw new Error('Checkpoint completed-task list is inconsistent.');
  if(mission.checkpoint.lastTaskId!==null&&!ids.has(mission.checkpoint.lastTaskId))throw new Error('Checkpoint references an unknown task.');

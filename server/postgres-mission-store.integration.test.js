@@ -42,8 +42,7 @@ test('PostgresMissionStore integration: CRUD, task synchronization and concurren
   assert.equal(taskRows.rows[0].task_id,'task-a');
   assert.equal(taskRows.rows[0].record_json.description,'Renamed first task');
 
-  const duplicate=await assert.rejects(storeB.create(updated),/already exists/i);
-  assert.ok(duplicate);
+  await assert.rejects(storeB.create(updated),/already exists/i);
   assert.equal((await pool.query('SELECT count(*)::int AS count FROM baye_mission_tasks WHERE mission_id=$1',[initial.id])).rows[0].count,1);
 
   const token=updated.updatedAt;

@@ -13,6 +13,22 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: baye_test
+          POSTGRES_USER: baye_test
+          POSTGRES_PASSWORD: baye_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U baye_test -d baye_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      BAYE_TEST_DATABASE_URL: postgres://baye_test:baye_test@localhost:5432/baye_test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,7 +38,7 @@ jobs:
           node-version: 24
       - name: Install dependencies
         run: npm install
-      - name: Run test suite
+      - name: Run test suite (including real PostgreSQL integration)
         run: npm test
       - name: Build application
         run: npm run build

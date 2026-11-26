@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MissionStore } from './mission-store.js';
@@ -24,4 +24,13 @@ test('lock allows a subsequent save after previous operation completes',async t=
  await a.save(update,{expectedUpdatedAt:token});const later=await b.get(original.id);
  const next={...later,goal:'second update',updatedAt:new Date(Date.parse(later.updatedAt)+1000).toISOString()};
  await b.save(next,{expectedUpdatedAt:later.updatedAt});assert.equal((await a.get(original.id)).goal,'second update');
+});
+test('lock timeout is bounded when lock file already exists',async t=>{
+ const {directory,a}=await fixture(t);const file=join(directory,'timeout-target.json');await writeFile(file+'.lock','occupied');
+ await assert.rejects(a._withLock(file,async()=>{}, {timeoutMs:60}),/Mission save lock timeout/);
+});
+test('lock is released when guarded operation throws',async t=>{
+ const {directory,a}=await fixture(t);const file=join(directory,'release-target.json');
+ await assert.rejects(a._withLock(file,async()=>{throw new Error('intentional test failure');}),/intentional test failure/);
+ await a._withLock(file,async()=>assert.ok(true),{timeoutMs:100});
 });

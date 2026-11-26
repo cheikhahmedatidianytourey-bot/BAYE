@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "purpose": "Standardized synthetic-media evaluation prompt set. These prompts are test inputs, not quality claims.",
+  "prompts": [
+    {
+      "id": "scene-01",
+      "modality": "image",
+      "category": "nature-water",
+      "prompt": "Photorealistic landscape photograph of a rocky coastline at dawn, natural wave foam, atmospheric haze and physically plausible reflections."
+    },
+    {
+      "id": "scene-02",
+      "modality": "image",
+      "category": "materials",
+      "prompt": "Macro photograph of brushed stainless steel beside clear glass, realistic microtexture, sharp focus falloff and accurate light reflections."
+    },
+    {
+      "id": "scene-03",
+      "modality": "image",
+      "category": "architecture",
+      "prompt": "Photograph of a modern concrete building in overcast daylight, precise perspective, subtle weathering and believable shadows."
+    },
+    {
+      "id": "scene-04",
+      "modality": "image",
+      "category": "mechanical",
+      "prompt": "Photograph of a parked electric vehicle with mechanically plausible wheel geometry, panel seams, glass and tire texture."
+    },
+    {
+      "id": "scene-05",
+      "modality": "video",
+      "category": "water-motion",
+      "prompt": "A short realistic video of a small wave rolling onto wet sand and receding, stable camera, natural motion and coherent reflections."
+    },
+    {
+      "id": "scene-06",
+      "modality": "video",
+      "category": "camera-motion",
+      "prompt": "A short cinematic video with a slow camera push toward a tree in a light breeze, consistent leaves, lighting and geometry."
+    },
+    {
+      "id": "scene-07",
+      "modality": "video",
+      "category": "everyday-motion",
+      "prompt": "A short realistic video of a dog trotting across a grassy field, anatomically plausible movement and consistent appearance."
+    },
+    {
+      "id": "scene-08",
+      "modality": "video",
+      "category": "physics",
+      "prompt": "A short video of water pouring from a glass pitcher into a glass, coherent fluid motion, accurate gravity and reflections."
+    }
+  ]
+}

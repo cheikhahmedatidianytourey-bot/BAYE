@@ -55,7 +55,7 @@ export function validateMission(mission){
  if(!MISSION_STATES.includes(mission.status))throw new Error('Invalid mission status.');
  if(!validIso(mission.createdAt)||!validIso(mission.updatedAt))throw new Error('Invalid mission timestamps.');
  if(mission.lastHeartbeatAt!==null&&!validIso(mission.lastHeartbeatAt))throw new Error('Invalid heartbeat timestamp.');
- if(!object(mission.constraints)||!Array.isArray(mission.tasks)||mission.tasks.length>500||!object(mission.checkpoint)||!Array.isArray(mission.checkpoint.completedTaskIds))throw new Error('Invalid constraints, tasks or checkpoint.');
+ if(!object(mission.constraints)||!Array.isArray(mission.tasks)||!object(mission.checkpoint)||!Array.isArray(mission.checkpoint.completedTaskIds))throw new Error('Invalid constraints, tasks or checkpoint.');
  if(JSON.stringify(mission.constraints).length>65536)throw new Error('Mission constraints exceed size limit.');
  if(mission.audit?.length>10000||mission.approvals?.length>1000)throw new Error('Mission audit or approvals exceed size limit.');
  if(mission.ownerRef!==null&&typeof mission.ownerRef!=='string')throw new Error('Invalid mission ownerRef.');

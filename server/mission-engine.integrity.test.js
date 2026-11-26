@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createMission,validateMission} from './mission-engine.js';
+import {createMission,validateMission,transitionMission,transitionTask} from './mission-engine.js';
 
 test('rejects invalid and non-string timestamps throughout mission and tasks',()=>{
  const m=createMission({goal:'timestamp checks',tasks:[{id:'t',description:'task'}]});
@@ -38,4 +38,34 @@ test('audit entries require event strings and valid timestamps',()=>{
  const m=createMission({goal:'audit transition'});
  assert.throws(()=>validateMission({...m,audit:[{event:7,at:m.createdAt}]}),/Invalid audit or approvals/);
  assert.throws(()=>validateMission({...m,audit:[{event:'test',at:'bad'}]}),/Invalid audit or approvals/);
+});
+
+test('mission pause and resume transitions preserve valid records',()=>{
+ const m=createMission({goal:'pause recovery'});
+ const running=transitionMission(m,'running');
+ const paused=transitionMission(running,'paused');
+ const resumed=transitionMission(paused,'running');
+ assert.equal(resumed.status,'running');
+ assert.equal(validateMission(resumed).valid,true);
+ assert.throws(()=>transitionMission(m,'completed'),/Invalid mission state transition/);
+});
+test('task retry after failure retains attempt accounting and valid checkpoint',()=>{
+ const m=createMission({goal:'retry recovery',tasks:[{id:'t',description:'task'}]});
+ const started=transitionTask(m,'t','running');
+ assert.equal(started.tasks[0].attempt,1);
+ const failed=transitionTask(started,'t','failed',{error:'temporary failure'});
+ const retryReady=transitionTask(failed,'t','pending');
+ const restarted=transitionTask(retryReady,'t','running');
+ assert.equal(restarted.tasks[0].attempt,2);
+ assert.equal(restarted.checkpoint.completedTaskIds.length,0);
+ assert.equal(validateMission(restarted).valid,true);
+});
+test('cancelled mission and task remain consistent and cannot be resumed illegally',()=>{
+ const m=createMission({goal:'cancel recovery',tasks:[{id:'t',description:'task'}]});
+ const cancelled=transitionMission(m,'cancelled');
+ assert.equal(cancelled.status,'cancelled');
+ assert.throws(()=>transitionMission(cancelled,'running'),/Invalid mission state transition/);
+ const taskCancelled=transitionTask(m,'t','cancelled');
+ assert.equal(taskCancelled.tasks[0].status,'cancelled');
+ assert.equal(validateMission(taskCancelled).valid,true);
 });

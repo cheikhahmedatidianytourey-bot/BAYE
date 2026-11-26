@@ -83,7 +83,8 @@ test('seeded fuzz corpus exercises varied deterministic DAGs and invalid mutatio
     assert.equal(validateMission(mission).taskCount, count);
     if (count >= 2) {
       const mutated = tasks.map(t => ({ ...t, dependencies: [...t.dependencies] }));
-      mutated[0].dependencies.push('f-' + (count - 1));
+      mutated[0].dependencies = ['f-' + (count - 1)];
+      mutated[count - 1].dependencies = ['f-0'];
       assert.throws(() => createMission({ goal: 'mutated fuzz sample', tasks: mutated }), /cycle/i);
     }
   }

@@ -21,6 +21,7 @@ import { buildStudioInstruction } from './studio-engine.js';
 import {createMissionRouter} from './mission-api.js';
 import {createMissionAuthenticator,parseMissionTokenRecords} from './mission-auth.js';
 import {createConfiguredMissionStore} from './mission-store-factory.js';
+import {createShutdownCoordinator} from './shutdown-coordinator.js';
 import {MissionWorker} from './mission-worker.js';
 
 
@@ -277,17 +278,7 @@ app.get('/api/media/status', mediaStatusLimiter, async (req,res)=>{
 app.use((err,req,res,next)=>{console.error('Unhandled API error',err?.message||err);if(res.headersSent)return next(err);res.status(500).json({error:'Erreur interne. Réessaie plus tard.'});});
 const port=process.env.PORT||10000;
 const httpServer=app.listen(port,'0.0.0.0',()=>{console.log('BAYE AI gateway listening on '+port);startPeriodicMonitor();});
-let shutdownPromise;
-async function shutdown(signal){
- if(shutdownPromise)return shutdownPromise;
- shutdownPromise=(async()=>{
-  console.log('BAYE AI gateway received '+signal+'; closing HTTP server.');
-  await new Promise((resolve,reject)=>httpServer.close(error=>error?reject(error):resolve()));
-  await missionStoreLifecycle.close();
-  console.log('BAYE AI gateway shutdown complete.');
- })();
- return shutdownPromise;
-}
+const shutdown=createShutdownCoordinator({server:httpServer,closeStorage:()=>missionStoreLifecycle.close(),timeoutMs:Number(process.env.BAYE_SHUTDOWN_TIMEOUT_MS)||20000});
 for(const signal of ['SIGTERM','SIGINT']){
  process.once(signal,()=>{void shutdown(signal).catch(error=>{console.error('BAYE shutdown failed',error?.message||'unknown error');process.exitCode=1;});});
 }

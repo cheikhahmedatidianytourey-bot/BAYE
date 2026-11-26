@@ -51,3 +51,20 @@ test('runner bounds report error text and scenario count deterministically', asy
   assert.equal(report.failed, 1);
   assert.ok(report.reports[0].error.length <= 500);
 });
+
+test('scenario timeout is reported and the batch continues', async () => {
+  const engine = createVerificationEngine({ maxScenarioDurationMs: 10 });
+  const report = await engine.run([
+    { name: 'timeout', run: () => new Promise(() => {}) },
+    { name: 'after-timeout', run: () => assert.ok(true) }
+  ]);
+  assert.equal(report.failed, 1);
+  assert.match(report.reports[0].error, /time limit/i);
+  assert.equal(report.reports[1].status, 'passed');
+});
+
+test('scenario duration configuration is bounded and scenarios are validated', async () => {
+  assert.throws(() => createVerificationEngine({ maxScenarioDurationMs: 30001 }), /bound/i);
+  const engine = createVerificationEngine();
+  await assert.rejects(() => engine.run([{ name: 'invalid' }]), /invalid scenario/i);
+});

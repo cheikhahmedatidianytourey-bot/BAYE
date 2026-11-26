@@ -1,3 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createMission,validateMission} from './mission-engine.js';
+
 test('rejects invalid and non-string timestamps throughout mission and tasks',()=>{
  const m=createMission({goal:'timestamp checks',tasks:[{id:'t',description:'task'}]});
  assert.throws(()=>validateMission({...m,createdAt:'not-a-date'}),/timestamps/);
@@ -20,3 +24,4 @@ test('rejects malformed audit entries and oversized constraints',()=>{
  assert.throws(()=>validateMission({...m,audit:[{event:'bad',at:'not-a-date'}]}),/audit/);
  assert.throws(()=>createMission({goal:'size limit',constraints:{payload:'x'.repeat(70000)}}),/size limit/);
 });
+

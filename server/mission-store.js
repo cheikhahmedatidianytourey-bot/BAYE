@@ -1,6 +1,6 @@
 // BAYE V6 Phase B — durable mission record storage (filesystem-backed).
 // Each mission is stored as an individual JSON file and written via atomic rename.
-import {mkdir,readFile,readdir,rename,rm,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,readdir,rename,rm,writeFile,link} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {validateMission} from './mission-engine.js';
@@ -20,8 +20,7 @@ export class MissionStore {
  async _read(id){try{return JSON.parse(await readFile(this._file(id),'utf8'));}catch(error){if(error.code==='ENOENT')return null;throw error;}}
  async get(id){await this.init();const mission=await this._read(id);if(mission)validateMission(mission);return mission?clone(mission):null;}
  async create(mission){validateMission(mission);await this.init();return this._serialize(async()=>{
-  const file=this._file(mission.id);if(await this._read(mission.id))throw new Error('Mission already exists.');
-  await this._writeAtomic(file,mission);return clone(mission);
+  const file=this._file(mission.id);await this._createAtomic(file,mission);return clone(mission);
  });}
  async save(mission){validateMission(mission);await this.init();return this._serialize(async()=>{
   if(!await this._read(mission.id))throw new Error('Mission does not exist.');
@@ -31,6 +30,12 @@ export class MissionStore {
   for(const name of names){if(!name.endsWith('.json'))continue;const id=name.slice(0,-5);if(!safeId(id))continue;const mission=await this._read(id);if(mission){validateMission(mission);records.push(mission);}}
   records.sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id));return clone(records);
  }
+ async _createAtomic(file,mission){const temp=file+'.'+randomUUID()+'.tmp';try{
+  await writeFile(temp,JSON.stringify(mission,null,2)+'\n',{encoding:'utf8',flag:'wx'});
+  // Hard-linking installs the fully written temp file atomically and fails if the target exists.
+  await link(temp,file);
+ }catch(error){if(error.code==='EEXIST')throw new Error('Mission already exists.');throw error;
+ }finally{await rm(temp,{force:true}).catch(()=>{});}}
  async _writeAtomic(file,mission){const temp=file+'.'+randomUUID()+'.tmp';try{
   await writeFile(temp,JSON.stringify(mission,null,2)+'\n',{encoding:'utf8',flag:'wx'});
   await rename(temp,file);

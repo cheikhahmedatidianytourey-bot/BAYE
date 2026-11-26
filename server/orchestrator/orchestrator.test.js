@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validatePlan,topologicalOrder} from './plan.js';
+import {CoreOrchestrator} from './orchestrator.js';
+const sample={tasks:[{id:'b',description:'Second',capability:'text',dependencies:['a'],order:1},{id:'a',description:'First',capability:'text',dependencies:[],order:0}]};
+test('validates and topologically orders dependencies',()=>{validatePlan(sample);assert.deepEqual(topologicalOrder(sample).map(t=>t.id),['a','b']);});
+test('rejects cycle, unknown dependency, duplicate id and bounds',()=>{assert.throws(()=>validatePlan({tasks:[{id:'x',description:'x',capability:'c',dependencies:['x']}]}),/self|cycle/i);assert.throws(()=>validatePlan({tasks:[{id:'x',description:'x',capability:'c',dependencies:['z']}]}),/unknown/i);assert.throws(()=>validatePlan({tasks:[{id:'x',description:'x',capability:'c',dependencies:[]},{id:'x',description:'y',capability:'c',dependencies:[]}]}),/unique/i);assert.throws(()=>validatePlan(sample,{maxTasks:1}),/bound/i);});
+test('runs with explicit planner, policy and executor; passes dependency results',async()=>{const seen=[];const core=new CoreOrchestrator({planner:async()=>sample,policy:async()=>({allowed:true}),executor:async({task,dependencyResults})=>{seen.push(task.id);return task.id==='a'?'A':dependencyResults.a+'B';}});const result=await core.run({goal:'test'});assert.equal(result.results.b,'AB');assert.deepEqual(seen,['a','b']);assert.equal(result.status,'completed');});
+test('policy rejects before execution',async()=>{let executions=0;const core=new CoreOrchestrator({planner:async()=>sample,policy:async()=>false,executor:async()=>{executions++;}});await assert.rejects(core.run({goal:'test'}),/policy/i);assert.equal(executions,0);});
+test('supports cancellation before planning/execution',async()=>{const controller=new AbortController();controller.abort(new Error('stop'));const core=new CoreOrchestrator({planner:async()=>sample,policy:async()=>true,executor:async()=>{}});await assert.rejects(core.run({goal:'test',signal:controller.signal}),/stop/);});

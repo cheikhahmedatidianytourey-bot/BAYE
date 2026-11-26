@@ -25,3 +25,17 @@ test('rejects malformed audit entries and oversized constraints',()=>{
  assert.throws(()=>createMission({goal:'size limit',constraints:{payload:'x'.repeat(70000)}}),/size limit/);
 });
 
+test('mission transition rejects invalid state and preserves record integrity',()=>{
+ const m=createMission({goal:'transition checks',tasks:[{id:'t',description:'task'}]});
+ assert.throws(()=>validateMission({...m,status:'unknown'}),/Invalid mission status/);
+ assert.throws(()=>validateMission({...m,updatedAt:'bad'}),/mission timestamps/);
+});
+test('checkpoint cannot claim a task completion before task state is completed',()=>{
+ const m=createMission({goal:'checkpoint transition',tasks:[{id:'t',description:'task'}]});
+ assert.throws(()=>validateMission({...m,checkpoint:{completedTaskIds:['t'],lastTaskId:'t'}}),/Checkpoint completed-task list is inconsistent/);
+});
+test('audit entries require event strings and valid timestamps',()=>{
+ const m=createMission({goal:'audit transition'});
+ assert.throws(()=>validateMission({...m,audit:[{event:7,at:m.createdAt}]}),/Invalid audit or approvals/);
+ assert.throws(()=>validateMission({...m,audit:[{event:'test',at:'bad'}]}),/Invalid audit or approvals/);
+});

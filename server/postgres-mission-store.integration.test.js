@@ -24,6 +24,7 @@ test('PostgresMissionStore integration: CRUD, task synchronization and concurren
   const storeA=new PostgresMissionStore({pool});
   const storeB=new PostgresMissionStore({pool});
   await storeA.init();
+  assert.equal(await storeA.verifySchema(),true);
   const initial=createMission({goal:'PostgreSQL integration',ownerRef:'integration-user',tasks:[
    {id:'task-a',description:'First task'},
    {id:'task-b',description:'Second task',dependencies:['task-a']}

@@ -22,8 +22,10 @@ export class MissionStore {
  async create(mission){validateMission(mission);await this.init();return this._serialize(async()=>{
   const file=this._file(mission.id);await this._createAtomic(file,mission);return clone(mission);
  });}
- async save(mission){validateMission(mission);await this.init();return this._serialize(async()=>{
-  if(!await this._read(mission.id))throw new Error('Mission does not exist.');
+ async save(mission,{expectedUpdatedAt}={}){validateMission(mission);await this.init();return this._serialize(async()=>{
+  const current=await this._read(mission.id);
+  if(!current)throw new Error('Mission does not exist.');
+  if(expectedUpdatedAt!==undefined&&current.updatedAt!==expectedUpdatedAt)throw new Error('Mission update conflict: stale expectedUpdatedAt.');
   await this._writeAtomic(this._file(mission.id),mission);return clone(mission);
  });}
  async list(){await this.init();const names=await readdir(this.directory);const records=[];

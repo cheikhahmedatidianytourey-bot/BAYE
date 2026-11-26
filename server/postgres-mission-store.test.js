@@ -3,9 +3,15 @@ import assert from 'node:assert/strict';
 import {PostgresMissionStore} from './postgres-mission-store.js';
 import {createMission} from './mission-engine.js';
 
-function fakePool({lockedRecord=null,updateRowCount=1}={}){
+function fakePool({lockedRecord=null,updateRowCount=1,insertError=null}={}){
  const calls=[];let released=false;
- const client={query:async(sql,params=[])=>{calls.push({sql,params});if(sql.startsWith('SELECT version'))return {rows:lockedRecord?[{version:1,record_json:lockedRecord}]:[]};if(sql.startsWith('UPDATE'))return {rowCount:updateRowCount};return {rows:[]};},release:()=>{released=true;}};
+ const client={query:async(sql,params=[])=>{
+  calls.push({sql,params});
+  if(sql.startsWith('SELECT version'))return {rows:lockedRecord?[{version:1,owner_id:lockedRecord.ownerRef||'system',record_json:lockedRecord}]:[]};
+  if(sql.startsWith('INSERT INTO baye_missions')&&insertError)throw insertError;
+  if(sql.startsWith('UPDATE'))return {rowCount:updateRowCount};
+  return {rows:[]};
+ },release:()=>{released=true;}};
  const pool={calls,client,get released(){return released;},query:async(sql,params=[])=>{calls.push({sql,params});return {rows:[]};},connect:async()=>client};
  return pool;
 }
@@ -15,16 +21,21 @@ test('Postgres store validates pool dependency',()=>assert.throws(()=>new Postgr
 test('Postgres create persists canonical record and maps duplicate key',async()=>{
  const pool=fakePool();const store=new PostgresMissionStore({pool});const record=mission();
  assert.deepEqual(await store.create(record),record);
- assert.match(pool.calls[0].sql,/INSERT INTO baye_missions/);
- assert.equal(pool.calls[0].params[0],record.id);
- const duplicatePool=fakePool();duplicatePool.query=async()=>{throw Object.assign(new Error('duplicate'),{code:'23505'});};
+ const insert=pool.calls.find(call=>call.sql.startsWith('INSERT INTO baye_missions'));
+ assert.ok(insert);
+ assert.equal(insert.params[0],record.id);
+ assert.ok(pool.calls.some(call=>call.sql==='COMMIT'));
+ const duplicatePool=fakePool({insertError:Object.assign(new Error('duplicate'),{code:'23505'})});
  await assert.rejects(new PostgresMissionStore({pool:duplicatePool}).create(record),/already exists/i);
+ assert.ok(duplicatePool.calls.some(call=>call.sql==='ROLLBACK'));
+ assert.equal(duplicatePool.released,true);
 });
 test('Postgres save uses row lock and commits successful update',async()=>{
  const initial=mission();const pool=fakePool({lockedRecord:initial});const store=new PostgresMissionStore({pool});
  const update={...initial,goal:'updated',updatedAt:new Date(Date.parse(initial.updatedAt)+1000).toISOString()};
  await store.save(update,{expectedUpdatedAt:initial.updatedAt});
  assert.ok(pool.calls.some(call=>/FOR UPDATE/.test(call.sql)));
+ assert.ok(pool.calls.some(call=>call.sql==='DELETE FROM baye_mission_tasks WHERE mission_id=$1'));
  assert.ok(pool.calls.some(call=>call.sql==='COMMIT'));
  assert.equal(pool.released,true);
 });
@@ -34,6 +45,12 @@ test('Postgres save rejects stale token and rolls back',async()=>{
  await assert.rejects(store.save(stale,{expectedUpdatedAt:'2000-01-01T00:00:00.000Z'}),/stale/i);
  assert.ok(pool.calls.some(call=>call.sql==='ROLLBACK'));
  assert.equal(pool.released,true);
+});
+test('Postgres save rejects owner changes and rolls back',async()=>{
+ const initial=mission();const pool=fakePool({lockedRecord:initial});const store=new PostgresMissionStore({pool});
+ const changed={...initial,ownerRef:'different-owner'};
+ await assert.rejects(store.save(changed),/owner is immutable/i);
+ assert.ok(pool.calls.some(call=>call.sql==='ROLLBACK'));
 });
 test('Postgres get and list validate returned mission records',async()=>{
  const record=mission();let count=0;const pool=fakePool();

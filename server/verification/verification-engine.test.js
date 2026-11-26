@@ -68,3 +68,23 @@ test('scenario duration configuration is bounded and scenarios are validated', a
   const engine = createVerificationEngine();
   await assert.rejects(() => engine.run([{ name: 'invalid' }]), /invalid scenario/i);
 });
+
+test('seeded fuzz corpus exercises varied deterministic DAGs and invalid mutations', () => {
+  let seed = 0x5eed1234;
+  const next = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };
+  for (let sample = 0; sample < 500; sample++) {
+    const count = next() % 30;
+    const tasks = Array.from({ length: count }, (_, i) => {
+      const deps = [];
+      for (let j = 0; j < i; j++) if ((next() % 11) === 0) deps.push('f-' + j);
+      return { id: 'f-' + i, description: 'fuzz task ' + i, dependencies: deps };
+    });
+    const mission = createMission({ goal: 'seeded fuzz sample ' + sample, tasks });
+    assert.equal(validateMission(mission).taskCount, count);
+    if (count >= 2) {
+      const mutated = tasks.map(t => ({ ...t, dependencies: [...t.dependencies] }));
+      mutated[0].dependencies.push('f-' + (count - 1));
+      assert.throws(() => createMission({ goal: 'mutated fuzz sample', tasks: mutated }), /cycle/i);
+    }
+  }
+});

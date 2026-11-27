@@ -1,4 +1,5 @@
-import { publicPlanCatalog, consumeFreeQuota, quotaUsage } from './subscription-policy.js';
+import { publicPlanCatalog, consumeFreeQuota, quotaUsage, SUBSCRIPTION_PLANS } from './subscription-policy.js';
+import { dbReady, initializeAccountQuotaDb, createAccount, loginAccount, authenticateAccount, consumeAccountQuota, accountQuotaUsage, revokeSession } from './account-quota-db.js';
 import express from 'express';
 import crypto from 'node:crypto';
 import cors from 'cors';
@@ -95,9 +96,13 @@ app.get('/api/monitor/check', async (req,res)=>{
   catch(_err){ res.status(500).json({error:'Monitoring check failed'}); }
 });
 
-app.get('/api/subscription-plans', (_req,res)=>res.json({plans:publicPlanCatalog(),billing:'disabled',enforcement:'free-tier-limited',note:'Free quotas are temporarily keyed to the server IP and held in memory; this is not durable account-based billing.'}));
-app.get('/api/subscription-usage',(req,res)=>res.json(quotaUsage(req.ip)));
-function enforceFreeQuota(type){return (req,res,next)=>{const quotaType=typeof type==='function'?type(req):type;const result=consumeFreeQuota(req.ip,quotaType);if(!result.allowed)return res.status(429).json({error:result.reason==='feature_not_included'?'Cette fonctionnalité est réservée aux abonnements payants.':'Quota gratuit atteint. Abonnez-vous pour continuer.',quota:result});req.quota=result;next();};}
+app.get('/api/subscription-plans', (_req,res)=>res.json({plans:publicPlanCatalog(),billing:'disabled',accountQuotas:dbReady()?'available':'database_not_configured',note:'Account quota storage requires database configuration.'}));
+app.post('/api/accounts/register',async(req,res)=>{try{if(!dbReady())return res.status(503).json({error:'Base de données non configurée.'});const account=await createAccount(req.body?.email,req.body?.password);res.status(201).json({account});}catch(err){res.status(err.status||500).json({error:err.status?err.message:'Création du compte impossible.'});}});
+app.post('/api/accounts/login',async(req,res)=>{try{if(!dbReady())return res.status(503).json({error:'Base de données non configurée.'});res.json(await loginAccount(req.body?.email,req.body?.password));}catch(err){res.status(err.status||500).json({error:err.status?err.message:'Connexion impossible.'});}});
+app.post('/api/accounts/logout',authenticateAccount,async(req,res)=>{try{await revokeSession(req);res.json({loggedOut:true});}catch(_){res.status(503).json({error:'Déconnexion impossible.'});}});
+app.get('/api/accounts/me',authenticateAccount,(req,res)=>res.json({account:req.account}));
+app.get('/api/subscription-usage',async(req,res)=>{try{if((req.get('authorization')||'').startsWith('Bearer ')&&dbReady()){await authenticateAccount(req,res,async()=>res.json(await accountQuotaUsage(req.account.id,SUBSCRIPTION_PLANS.free.quotas)));return;}res.json(quotaUsage(req.ip));}catch(_){res.status(503).json({error:'Usage indisponible.'});}});
+function enforceFreeQuota(type){return async(req,res,next)=>{const quotaType=typeof type==='function'?type(req):type;try{if((req.get('authorization')||'').startsWith('Bearer ')&&dbReady()){await authenticateAccount(req,res,async()=>{const result=await consumeAccountQuota(req.account.id,quotaType,SUBSCRIPTION_PLANS.free.quotas);if(!result.allowed)return res.status(429).json({error:result.reason==='feature_not_included'?'Cette fonctionnalité est réservée aux abonnements payants.':'Quota gratuit atteint. Abonnez-vous pour continuer.',quota:result});req.quota=result;next();});return;}const result=consumeFreeQuota(req.ip,quotaType);if(!result.allowed)return res.status(429).json({error:result.reason==='feature_not_included'?'Cette fonctionnalité est réservée aux abonnements payants.':'Quota gratuit atteint. Abonnez-vous pour continuer.',quota:result});req.quota=result;next();}catch(_){res.status(503).json({error:'Contrôle du quota indisponible.'});}};}
 
 // BAYE Payments: safe public catalog only; checkout and verification stay disabled until a provider is configured.
 app.get('/api/payment-methods', (_req,res)=>res.json({
@@ -256,4 +261,4 @@ app.get('/api/media/status', mediaStatusLimiter, async (req,res)=>{
 });
 // Normalize unexpected errors without exposing stack traces or secrets to clients.
 app.use((err,req,res,next)=>{console.error('Unhandled API error',err?.message||err);if(res.headersSent)return next(err);res.status(500).json({error:'Erreur interne. Réessaie plus tard.'});});
-const port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>{console.log('BAYE AI gateway listening on '+port);startPeriodicMonitor();});
+const port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>{console.log('BAYE AI gateway listening on '+port);startPeriodicMonitor();if(dbReady())initializeAccountQuotaDb().then(()=>console.log('BAYE account/quota database initialized')).catch(err=>console.error('BAYE account DB initialization failed:',err.message));});

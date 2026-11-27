@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {validateProjectConsistency} from '../server/project-consistency-validator.js';
+const good=[{path:'package.json',content:JSON.stringify({dependencies:{express:'*'}})},{path:'README.md',content:'# Project'},{path:'src/main.js',content:"import express from 'express';"},{path:'test/main.test.js',content:'test'}];
+test('accepts coherent manifest',()=>assert.equal(validateProjectConsistency(good).passed,true));
+test('rejects non-array',()=>assert.equal(validateProjectConsistency(null).passed,false));
+test('detects malformed package JSON',()=>assert.ok(validateProjectConsistency([{path:'package.json',content:'{'},{path:'README.md',content:'ok'}]).issues.some(x=>x.code==='PACKAGE_JSON_INVALID')));
+test('detects undeclared imported dependency',()=>assert.ok(validateProjectConsistency([{path:'package.json',content:'{}'},{path:'README.md',content:'ok'},{path:'app.js',content:"import foo from 'foo-package';"},{path:'test/app.test.js',content:'ok'}]).issues.some(x=>x.code==='UNDECLARED_DEPENDENCY'&&x.dependency==='foo-package')));
+test('accepts declared dependency',()=>assert.ok(!validateProjectConsistency([{path:'package.json',content:JSON.stringify({dependencies:{foo:'1'}})},{path:'README.md',content:'ok'},{path:'app.js',content:"import foo from 'foo';"},{path:'test/app.test.js',content:'ok'}]).issues.some(x=>x.code==='UNDECLARED_DEPENDENCY')));
+test('detects README missing',()=>assert.ok(validateProjectConsistency([{path:'app.js',content:'ok'},{path:'test/app.test.js',content:'ok'}]).issues.some(x=>x.code==='README_MISSING')));
+test('detects source entry missing',()=>assert.ok(validateProjectConsistency([{path:'src/feature.js',content:'ok'},{path:'README.md',content:'ok'},{path:'test/a.test.js',content:'ok'}]).issues.some(x=>x.code==='SOURCE_ENTRY_MISSING')));
+test('detects missing tests',()=>assert.ok(validateProjectConsistency([{path:'README.md',content:'ok'},{path:'app.js',content:'ok'}]).issues.some(x=>x.code==='TEST_FILES_MISSING')));
+test('declares static-only limitation',()=>{const r=validateProjectConsistency(good);assert.equal(r.scope,'static_consistency_only');assert.match(r.limitation,/Does not install/);});

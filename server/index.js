@@ -18,6 +18,7 @@ import { generateCloudflareImage, getMediaProviderStatus } from './ai/media-adap
 import { verifyTextOutput } from './verification-layer.js';
 import { validatePublicImageUrl } from './ai/image-url-validation.js';
 import { readJsonLimited } from './ai/bounded-json.js';
+import { submitVideo, checkVideoStatus } from './ai/video-queue-adapter.js';
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
 
@@ -226,10 +227,8 @@ app.post('/api/media/generate', mediaLimiter, enforceFreeQuota(req=>req.body?.ty
     if(image_url){
       if(typeof image_url!=='string'||image_url.length>2048||!(await validatePublicImageUrl(image_url)))return res.status(400).json({error:'L’image doit utiliser une URL HTTPS publique valide, sans port ni adresse locale.'});
     }
-    const model=falModels.video,payload={prompt:prompt.trim()};if(image_url)payload.image_url=image_url;
-    const upstream=await fetch('https://queue.fal.run/'+model,{method:'POST',headers:{Authorization:'Key '+falKey,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});
-    if(!upstream.ok){console.warn('fal video submission rejected',upstream.status);return res.status(502).json({code:'MEDIA_PROVIDER_REJECTED',error:'Le fournisseur vidéo externe a refusé cette demande. BAYE n’a pas pu lancer cette génération.'});}
-    const data=await readJsonLimited(upstream);if(typeof data?.request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(data.request_id))return res.status(502).json({error:'Le fournisseur vidéo a retourné un identifiant invalide.'});res.json({request_id:data.request_id,model,type,status_url:'/api/media/status?type=video&request_id='+encodeURIComponent(data.request_id)});
+    const submitted=await submitVideo({prompt:prompt.trim(),image_url,apiKey:falKey,fetchImpl:(url,opts)=>fetch(url,{...opts,signal:AbortSignal.timeout(45000)})});
+    res.json(submitted);
   }catch(err){
     if(err?.code==='MEDIA_NOT_CONFIGURED')return res.status(503).json({code:err.code,error:err.message});
     if(err?.code==='MEDIA_INVALID_PROMPT')return res.status(400).json({code:err.code,error:err.message});
@@ -251,12 +250,8 @@ app.get('/api/media/status', mediaStatusLimiter, async (req,res)=>{
   try{
     const falKey=process.env.FAL_KEY;if(!falKey)return res.status(503).json({error:'Service vidéo non configuré.'});
     const {type,request_id}=req.query;if(type!=='video'||typeof request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(request_id))return res.status(400).json({error:'Paramètres invalides.'});
-    const model=falModels.video;const statusRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id+'/status',{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});
-    if(!statusRes.ok)return res.status(502).json({error:'Impossible de vérifier la génération.'});
-    const status=await readJsonLimited(statusRes,1024*1024);if(status.status!=='COMPLETED')return res.json({status:status.status});
-    const resultRes=await fetch('https://queue.fal.run/'+model+'/requests/'+request_id,{headers:{Authorization:'Key '+falKey},signal:AbortSignal.timeout(20000)});
-    if(!resultRes.ok)return res.status(502).json({error:'Résultat indisponible.'});
-    const result=await readJsonLimited(resultRes);res.json({status:'COMPLETED',result});
+    const checked=await checkVideoStatus({request_id,apiKey:falKey,fetchImpl:(url,opts)=>fetch(url,{...opts,signal:AbortSignal.timeout(20000)})});
+    res.json(checked);
   }catch(err){console.error('BAYE media status error',err);res.status(500).json({error:'Erreur interne de vérification.'});}
 });
 // Normalize unexpected errors without exposing stack traces or secrets to clients.

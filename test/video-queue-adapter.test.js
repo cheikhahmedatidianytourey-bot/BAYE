@@ -33,3 +33,24 @@ test('status validates request ID and handles provider errors',async()=>{
 test('status rejects oversized payloads',async()=>{
  await assert.rejects(()=>checkVideoStatus({request_id:'abc',apiKey:key,fetchImpl:async()=>response(200,{status:'COMPLETED'},{'content-length':'2000000'})}),e=>e.code==='RESPONSE_TOO_LARGE');
 });
+
+test('submission forwards optional image URL and auth headers',async()=>{
+ const out=await submitVideo({prompt:' scene ',image_url:'https://public.example/image.jpg',apiKey:key,fetchImpl:async(_url,opts)=>{
+  assert.equal(opts.headers.Authorization,'Key test-key');
+  assert.equal(JSON.parse(opts.body).image_url,'https://public.example/image.jpg');
+  return response(200,{request_id:'img_123'});
+ }});
+ assert.equal(out.request_id,'img_123');
+});
+test('submission rejects oversized provider payload',async()=>{
+ await assert.rejects(()=>submitVideo({prompt:'scene',apiKey:key,fetchImpl:async()=>response(200,{request_id:'ok'},{'content-length':'2000000'})}),e=>e.code==='RESPONSE_TOO_LARGE');
+});
+test('completed result response size is bounded',async()=>{
+ let calls=0;
+ await assert.rejects(()=>checkVideoStatus({request_id:'abc',apiKey:key,fetchImpl:async()=>{calls++;return calls===1?response(200,{status:'COMPLETED'}):response(200,{result:'x'.repeat(1024*1024+100)});}}),e=>e.code==='RESPONSE_TOO_LARGE');
+});
+test('invalid status payload and result failures are surfaced',async()=>{
+ await assert.rejects(()=>checkVideoStatus({request_id:'abc',apiKey:key,fetchImpl:async()=>response(200,{})}),e=>e.code==='INVALID_STATUS');
+ let calls=0;
+ await assert.rejects(()=>checkVideoStatus({request_id:'abc',apiKey:key,fetchImpl:async()=>{calls++;return calls===1?response(200,{status:'COMPLETED'}):response(502,{});}}),e=>e.code==='RESULT_FAILED'&&e.status===502);
+});

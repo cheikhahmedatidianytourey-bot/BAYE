@@ -62,7 +62,7 @@ test('rejects content that is not a string and continues scanning', () => {
 });
 
 test('accounts for UTF-8 byte length rather than character count', () => {
-  const result = validateProjectFiles([{ path: 'unicode.txt', content: 'é🙂' }], { maxTotalBytes: 5 });
+  const result = validateProjectFiles([{ path: 'unicode.txt', content: 'é🙂' }], { maxTotalBytes: 6 });
   assert.equal(result.totalBytes, Buffer.byteLength('é🙂', 'utf8'));
   assert.equal(result.passed, true);
 });

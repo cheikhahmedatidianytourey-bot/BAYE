@@ -41,7 +41,7 @@ export async function consumeAccountQuota(accountId,type,limits){
  if(!pool||!types.has(type))return {allowed:false,reason:'unavailable'};
  const limit=limits[type];if(!Number.isSafeInteger(limit)||limit<0)return {allowed:false,reason:'invalid_policy'};
  const period=new Date().toISOString().slice(0,7);
- const r=await pool.query(`INSERT INTO baye_quota_usage(account_id,period,usage_type,used) VALUES($1,$2,$3,1) ON CONFLICT(account_id,period,usage_type) DO UPDATE SET used=baye_quota_usage.used+1 WHERE baye_quota_usage.used<$4 RETURNING used`,[accountId,period,type,limit]);
+ const r=await pool.query(`INSERT INTO baye_quota_usage(account_id,period,usage_type,used) SELECT $1,$2,$3,1 WHERE $4>0 ON CONFLICT(account_id,period,usage_type) DO UPDATE SET used=baye_quota_usage.used+1 WHERE baye_quota_usage.used<$4 RETURNING used`,[accountId,period,type,limit]);
  if(!r.rows.length){const c=await pool.query('SELECT used FROM baye_quota_usage WHERE account_id=$1 AND period=$2 AND usage_type=$3',[accountId,period,type]);return {allowed:false,reason:limit===0?'feature_not_included':'quota_exceeded',limit,used:c.rows[0]?.used||0,remaining:0,period};}
  return {allowed:true,limit,used:r.rows[0].used,remaining:limit-r.rows[0].used,period};
 }

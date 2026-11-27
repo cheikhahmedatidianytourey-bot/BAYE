@@ -1,0 +1,10 @@
+const DEFAULT_ENTRY_CANDIDATES=['src/main.js','src/main.ts','src/main.jsx','src/main.tsx','index.js','index.ts','index.jsx','index.tsx'];
+/** Static project consistency checks only; never executes generated code. */
+export function validateProjectConsistency(files){
+ const issues=[]; if(!Array.isArray(files))return {passed:false,issues:[{code:'FILES_NOT_ARRAY'}],scope:'static_consistency_only'};
+ const byPath=new Map();for(const f of files){if(f&&typeof f.path==='string')byPath.set(f.path,f.content);}const paths=[...byPath.keys()];
+ let pkg=null;const raw=byPath.get('package.json');if(raw!==undefined){try{pkg=JSON.parse(raw);}catch{issues.push({code:'PACKAGE_JSON_INVALID'});}if(pkg&&typeof pkg!=='object')issues.push({code:'PACKAGE_JSON_NOT_OBJECT'});}
+ if(pkg&&typeof pkg==='object'){const declared={...(pkg.dependencies||{}),...(pkg.devDependencies||{}),...(pkg.peerDependencies||{})};for(const [path,content] of byPath){if(typeof content!=='string')continue;const re=/\b(?:from\s*|import\s*\(|require\s*\()\s*['\"]([^'\"]+)['\"]/g;let m;while((m=re.exec(content))){const mod=m[1];if(mod.startsWith('.')||mod.startsWith('/')||mod.startsWith('#')||mod.startsWith('node:'))continue;const root=mod.startsWith('@')?mod.split('/').slice(0,2).join('/'):mod.split('/')[0];if(root&&!declared[root])issues.push({code:'UNDECLARED_DEPENDENCY',dependency:root,path});}}}
+ if(paths.length&&!paths.some(p=>p==='README.md'||p==='readme.md'))issues.push({code:'README_MISSING'});if(paths.some(p=>p.startsWith('src/'))&&!paths.some(p=>DEFAULT_ENTRY_CANDIDATES.includes(p)))issues.push({code:'SOURCE_ENTRY_MISSING'});if(paths.length&&!paths.some(p=>p.startsWith('test/')||p.startsWith('tests/')||p.endsWith('.test.js')||p.endsWith('.spec.js')))issues.push({code:'TEST_FILES_MISSING'});
+ return {passed:issues.length===0,filesChecked:paths.length,issues,scope:'static_consistency_only',limitation:'Static heuristics only. Does not install dependencies, execute code, compile, or confirm runtime behavior.'};
+}

@@ -1,0 +1,12 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {runProjectBuildTest} from '../server/project-build-test-runner.js';
+const project=[{path:'package.json',content:JSON.stringify({scripts:{build:'vite build'}})},{path:'README.md',content:'# demo'},{path:'src/main.js',content:'console.log(1)'}];
+const fake=async (out)=>({execute:async input=>{assert.equal(input.command,'npm');assert.deepEqual(input.args,['run','build']);assert.equal(input.network,false);return out;}});
+test('refuses to run without sandbox adapter',async()=>assert.ok((await runProjectBuildTest(project)).issues.some(x=>x.code==='SANDBOX_ADAPTER_REQUIRED')));
+test('preflight rejects traversal paths before execution',async()=>{const r=await runProjectBuildTest([...project,{path:'../escape',content:'x'}],{sandbox:await fake({exitCode:0})});assert.equal(r.stage,'preflight');});
+test('requires build script',async()=>{const files=[{path:'package.json',content:'{}'},{path:'README.md',content:'x'}];const r=await runProjectBuildTest(files,{sandbox:await fake({exitCode:0})});assert.ok(r.issues.some(x=>x.code==='BUILD_SCRIPT_MISSING'));});
+test('rejects malformed package json',async()=>{const files=[{path:'package.json',content:'{'},{path:'README.md',content:'x'}];const r=await runProjectBuildTest(files,{sandbox:await fake({exitCode:0})});assert.ok(r.issues.some(x=>x.code==='PACKAGE_JSON_INVALID'));});
+test('reports successful sandbox build',async()=>{const r=await runProjectBuildTest(project,{sandbox:await fake({exitCode:0,stdout:'build ok'} )});assert.equal(r.passed,true);});
+test('reports build failure',async()=>{const r=await runProjectBuildTest(project,{sandbox:await fake({exitCode:1,stderr:'error'})});assert.equal(r.passed,false);assert.ok(r.issues.some(x=>x.code==='BUILD_FAILED'));});
+test('reports timeout',async()=>{const r=await runProjectBuildTest(project,{sandbox:await fake({exitCode:null,timedOut:true})});assert.ok(r.issues.some(x=>x.code==='BUILD_TIMEOUT'));});
+test('bounds timeout input',async()=>{const r=await runProjectBuildTest(project,{sandbox:await fake({exitCode:0}),timeoutMs:500});assert.ok(r.issues.some(x=>x.code==='TIMEOUT_OUT_OF_RANGE'));});
+test('handles sandbox exceptions',async()=>{const r=await runProjectBuildTest(project,{sandbox:{execute:async()=>{throw Error('adapter crash')}}});assert.ok(r.issues.some(x=>x.code==='SANDBOX_EXECUTION_ERROR'));});

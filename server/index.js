@@ -1,4 +1,4 @@
-import { publicPlanCatalog, checkQuota } from './subscription-policy.js';
+import { publicPlanCatalog } from './subscription-policy.js';
 import express from 'express';
 import crypto from 'node:crypto';
 import cors from 'cors';

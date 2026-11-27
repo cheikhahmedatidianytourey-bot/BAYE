@@ -1,4 +1,4 @@
-import { publicPlanCatalog } from './subscription-policy.js';
+import { publicPlanCatalog, consumeFreeQuota, quotaUsage } from './subscription-policy.js';
 import express from 'express';
 import crypto from 'node:crypto';
 import cors from 'cors';
@@ -95,7 +95,9 @@ app.get('/api/monitor/check', async (req,res)=>{
   catch(_err){ res.status(500).json({error:'Monitoring check failed'}); }
 });
 
-app.get('/api/subscription-plans', (_req,res)=>res.json({plans:publicPlanCatalog(),billing:'disabled',enforcement:'policy_only',note:'Plan catalogue and quota policy are groundwork only; user accounts, persistent usage counters, pricing and payment activation are not connected.'}));
+app.get('/api/subscription-plans', (_req,res)=>res.json({plans:publicPlanCatalog(),billing:'disabled',enforcement:'free-tier-limited',note:'Free quotas are temporarily keyed to the server IP and held in memory; this is not durable account-based billing.'}));
+app.get('/api/subscription-usage',(req,res)=>res.json(quotaUsage(req.ip)));
+function enforceFreeQuota(type){return (req,res,next)=>{const result=consumeFreeQuota(req.ip,type);if(!result.allowed)return res.status(429).json({error:result.reason==='feature_not_included'?'Cette fonctionnalité est réservée aux abonnements payants.':'Quota gratuit atteint. Abonnez-vous pour continuer.',quota:result});req.quota=result;next();};}
 
 // BAYE Payments: safe public catalog only; checkout and verification stay disabled until a provider is configured.
 app.get('/api/payment-methods', (_req,res)=>res.json({
@@ -151,7 +153,7 @@ async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0
     temperature
   });
 }
-app.post('/api/generate', generationLimiter, async (req,res)=>{
+app.post('/api/generate', generationLimiter, enforceFreeQuota('text'), async (req,res)=>{
   try {
     const {prompt,kind='Texte'}=req.body||{};
     if(typeof prompt!=='string'||!prompt.trim()) return res.status(400).json({error:'Écris une demande avant de générer.'});
@@ -177,7 +179,7 @@ app.post('/api/generate', generationLimiter, async (req,res)=>{
 });
 
 // BAYE Agent: two-call cost-conscious workflow (plan + final with built-in quality review).
-app.post('/api/agent', generationLimiter, async (req,res)=>{
+app.post('/api/agent', generationLimiter, enforceFreeQuota('agent'), async (req,res)=>{
   try{
     const {prompt,kind='Texte'}=req.body||{};
     if(typeof prompt!=='string'||!prompt.trim())return res.status(400).json({error:'Écris un objectif avant de lancer BAYE Agent.'});
@@ -204,7 +206,7 @@ app.post('/api/agent', generationLimiter, async (req,res)=>{
   }catch(err){console.error('BAYE agent error',err);res.status(502).json({error:'BAYE Agent n’a pas pu terminer. Réessaie plus tard.'});}
 });
 const falModels = {image:'fal-ai/flux/schnell',video:'fal-ai/kling-video/v2.1/standard/text-to-video'};
-app.post('/api/media/generate', mediaLimiter, async (req,res)=>{
+app.post('/api/media/generate', mediaLimiter, enforceFreeQuota(reqType(req)), async (req,res)=>{
   try {
     const {prompt,type='image',image_url}=req.body||{};
     if(typeof prompt!=='string'||!prompt.trim()) return res.status(400).json({error:'Prompt requis.'});

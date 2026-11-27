@@ -20,11 +20,11 @@ function audit(files) {
     if (!pkg.scripts || typeof pkg.scripts.test !== 'string' || !pkg.scripts.test.trim()) issues.push({ code: 'TEST_SCRIPT_MISSING' });
     const declared = new Set([...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.devDependencies || {})]);
     for (const file of files) {
-      if (!file || typeof file.content !== 'string' || !/\\.(?:js|jsx|ts|tsx|mjs|cjs)$/.test(file.path)) continue;
-      const imports = [...file.content.matchAll(/(?:from\\s*|import\\s*)['"]([^'"]+)['"]|require\\(['"]([^'"]+)['"]\\)/g)].map(m => m[1] || m[2]);
+      if (!file || typeof file.content !== 'string' || !/\.(?:js|jsx|ts|tsx|mjs|cjs)$/.test(file.path)) continue;
+      const imports = [...file.content.matchAll(/(?:from\s*|import\s*)['"]([^'"]+)['"]|require\(['"]([^'"]+)['"]\)/g)].map(m => m[1] || m[2]);
       for (const spec of imports) {
         if (spec.startsWith('.')) {
-          const target = spec.replace(/^\\.\\//, '');
+          const target = spec.replace(/^\.\//, '');
           const parent = file.path.split('/').slice(0, -1).join('/');
           const candidates = [parent ? parent + '/' + target : target, target + '.js', target + '.ts', target + '.jsx', target + '.tsx', target + '/index.js'];
           if (!candidates.some(p => byPath.has(p))) issues.push({ code: 'LOCAL_IMPORT_MISSING', file: file.path, import: spec });

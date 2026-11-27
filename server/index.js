@@ -1,3 +1,4 @@
+import { publicPlanCatalog } from './subscription-policy.js';
 import express from 'express';
 import crypto from 'node:crypto';
 import cors from 'cors';
@@ -93,6 +94,8 @@ app.get('/api/monitor/check', async (req,res)=>{
   try { res.json(await runMonitor()); }
   catch(_err){ res.status(500).json({error:'Monitoring check failed'}); }
 });
+
+app.get('/api/subscription-plans', (_req,res)=>res.json({plans:publicPlanCatalog(),billing:'disabled',enforcement:'policy_only',note:'Plan catalogue and quota policy are groundwork only; user accounts, persistent usage counters, pricing and payment activation are not connected.'}));
 
 // BAYE Payments: safe public catalog only; checkout and verification stay disabled until a provider is configured.
 app.get('/api/payment-methods', (_req,res)=>res.json({

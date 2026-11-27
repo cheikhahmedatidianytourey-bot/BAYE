@@ -18,7 +18,7 @@ import { generateCloudflareImage, getMediaProviderStatus } from './ai/media-adap
 import { verifyTextOutput } from './verification-layer.js';
 import { validatePublicImageUrl } from './ai/image-url-validation.js';
 import { readJsonLimited } from './ai/bounded-json.js';
-import { submitVideo, checkVideoStatus } from './ai/video-queue-adapter.js';
+import { createVideoSubmitHandler, createVideoStatusHandler } from './ai/video-route-handlers.js';
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
 
@@ -212,6 +212,8 @@ app.post('/api/agent', generationLimiter, enforceFreeQuota('agent'), async (req,
   }catch(err){console.error('BAYE agent error',err);res.status(502).json({error:'BAYE Agent n’a pas pu terminer. Réessaie plus tard.'});}
 });
 const falModels = {image:'fal-ai/flux/schnell',video:'fal-ai/kling-video/v2.1/standard/text-to-video'};
+const videoSubmitHandler=createVideoSubmitHandler();
+const videoStatusHandler=createVideoStatusHandler();
 app.post('/api/media/generate', mediaLimiter, enforceFreeQuota(req=>req.body?.type==='video'?'video':'image'), async (req,res)=>{
   try {
     const {prompt,type='image',image_url}=req.body||{};
@@ -222,13 +224,7 @@ app.post('/api/media/generate', mediaLimiter, enforceFreeQuota(req=>req.body?.ty
       const generated=await generateCloudflareImage({prompt:prompt.trim()});
       return res.json(generated);
     }
-    const falKey=process.env.FAL_KEY;
-    if(!falKey) return res.status(503).json({code:'VIDEO_PROVIDER_NOT_CONFIGURED',error:'La génération vidéo nécessite la configuration d’un fournisseur vidéo. Aucun coût ne sera déclenché automatiquement.'});
-    if(image_url){
-      if(typeof image_url!=='string'||image_url.length>2048||!(await validatePublicImageUrl(image_url)))return res.status(400).json({error:'L’image doit utiliser une URL HTTPS publique valide, sans port ni adresse locale.'});
-    }
-    const submitted=await submitVideo({prompt:prompt.trim(),image_url,apiKey:falKey,fetchImpl:(url,opts)=>fetch(url,{...opts,signal:AbortSignal.timeout(45000)})});
-    res.json(submitted);
+    return videoSubmitHandler(req,res);
   }catch(err){
     if(err?.code==='MEDIA_NOT_CONFIGURED')return res.status(503).json({code:err.code,error:err.message});
     if(err?.code==='MEDIA_INVALID_PROMPT')return res.status(400).json({code:err.code,error:err.message});
@@ -246,14 +242,7 @@ app.post('/api/media/generate', mediaLimiter, enforceFreeQuota(req=>req.body?.ty
     console.error('BAYE media error',err);res.status(500).json({error:'Erreur interne du générateur média.'});
   }
 });
-app.get('/api/media/status', mediaStatusLimiter, async (req,res)=>{
-  try{
-    const falKey=process.env.FAL_KEY;if(!falKey)return res.status(503).json({error:'Service vidéo non configuré.'});
-    const {type,request_id}=req.query;if(type!=='video'||typeof request_id!=='string'||! /^[a-zA-Z0-9_-]{1,200}$/.test(request_id))return res.status(400).json({error:'Paramètres invalides.'});
-    const checked=await checkVideoStatus({request_id,apiKey:falKey,fetchImpl:(url,opts)=>fetch(url,{...opts,signal:AbortSignal.timeout(20000)})});
-    res.json(checked);
-  }catch(err){console.error('BAYE media status error',err);res.status(500).json({error:'Erreur interne de vérification.'});}
-});
+app.get('/api/media/status', mediaStatusLimiter, videoStatusHandler);
 // Normalize unexpected errors without exposing stack traces or secrets to clients.
 app.use((err,req,res,next)=>{console.error('Unhandled API error',err?.message||err);if(res.headersSent)return next(err);res.status(500).json({error:'Erreur interne. Réessaie plus tard.'});});
 const port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>{console.log('BAYE AI gateway listening on '+port);startPeriodicMonitor();if(dbReady())initializeAccountQuotaDb().then(()=>console.log('BAYE account/quota database initialized')).catch(err=>console.error('BAYE account DB initialization failed:',err.message));});

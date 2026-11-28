@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {inspectDatasetBatch,getDataQualityPipelineStatus} from '../server/ai/data-quality-pipeline.js';
+test('normalizes and accepts bounded records',()=>{const r=inspectDatasetBatch({records:[{text:' hello   world '},{b:2,a:1}]});assert.equal(r.status,'processed');assert.equal(r.report.acceptedCount,2);assert.equal(r.report.accepted[0].record.text,'hello world');});
+test('deduplicates semantically normalized records',()=>{const r=inspectDatasetBatch({records:[{text:' hello '},{text:'hello'}]});assert.equal(r.report.acceptedCount,1);assert.equal(r.report.duplicateCount,1);});
+test('rejects malformed and empty entries',()=>{const r=inspectDatasetBatch({records:[null,[],{},'x']});assert.equal(r.report.acceptedCount,0);assert.equal(r.report.emptyCount,1);assert.ok(r.report.issues.some(x=>x.code==='invalid-record'));});
+test('bounds batch and record size',()=>{assert.equal(inspectDatasetBatch({records:[]}).status,'rejected');assert.equal(inspectDatasetBatch({records:Array(201).fill({a:1})}).status,'rejected');const r=inspectDatasetBatch({records:[{payload:'x'.repeat(9000)}]});assert.equal(r.report.oversizeCount,1);});
+test('stable fingerprint independent of key order',()=>{const r=inspectDatasetBatch({records:[{a:1,b:2},{b:2,a:1}]});assert.equal(r.report.duplicateCount,1);});
+test('scope and status disclose no persistence/training',()=>{assert.match(inspectDatasetBatch({records:[{a:1}]}).scope,/no persistence/);assert.equal(getDataQualityPipelineStatus().training,'not-implemented');});

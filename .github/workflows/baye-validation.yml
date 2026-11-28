@@ -20,6 +20,8 @@ jobs:
           node-version: '24'
       - name: Install dependencies
         run: npm install
+      - name: Verify pinned snapshot integrity manifest
+        run: npm run verify:snapshot-integrity
       - name: Run automated tests
         run: npm test
       - name: Build web application

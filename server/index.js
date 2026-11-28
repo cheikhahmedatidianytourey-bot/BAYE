@@ -28,6 +28,7 @@ import { inspectTextForVerification, getVerificationEngineStatus } from './ai/ve
 import { validateDatasetRecord, getDataEngineStatus } from './ai/data-engine.js';
 import { inspectDatasetBatch, getDataQualityPipelineStatus } from './ai/data-quality-pipeline.js';
 import { inspectControlledDatasetIntake, getControlledIntakeStatus } from './ai/controlled-dataset-intake.js';
+import { assessTrainingReadiness, getTrainingReadinessStatus } from './ai/training-readiness.js';
 import { registryReady, initializeDatasetRegistry, registerDatasetEntry, registryEntryFromIntake, listDatasetEntries, getDatasetVersionHistory, inspectRegistryIntegrity, getDatasetRegistryStatus } from './ai/dataset-registry.js';
 
 const app = express();
@@ -51,6 +52,8 @@ const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyH
 const mediaStatusLimiter=rateLimit({windowMs:60_000,max:30,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de vérifications média. Réessaie dans une minute.'}});
 app.get('/', (_req,res)=>res.type('text').send('BAYE AI CORE — Gateway online. Use /health for system status.'));
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo(),independentCore:getIndependentCoreStatus()}));
+app.get('/api/training-readiness/status', (_req,res)=>res.json(getTrainingReadinessStatus()));
+app.post('/api/training-readiness/assess', generationLimiter, (req,res)=>{const result=assessTrainingReadiness(req.body);if(result.status==='rejected')return res.status(400).json(result);res.json(result);});
 app.get('/api/owned-models/status', (_req,res)=>res.json(getOwnedModelDevelopmentStatus()));
 app.get('/api/verification/status', (_req,res)=>res.json(getVerificationEngineStatus()));
 app.get('/api/data-engine/status', (_req,res)=>res.json({...getDataEngineStatus(),qualityPipeline:getDataQualityPipelineStatus(),controlledIntake:getControlledIntakeStatus(),datasetRegistry:getDatasetRegistryStatus()}));

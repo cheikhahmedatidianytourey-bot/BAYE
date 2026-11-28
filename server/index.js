@@ -61,6 +61,8 @@ import { inspectComputeResources, planComputeDispatch, getComputeWorkerStatus } 
 app.get('/api/training-engine/status', (_req,res)=>res.json(getTrainingEngineStatus()));
 import { enqueueControlledTask, updateControlledTaskStage, getControlledTask, listControlledTasks, getControlledTaskQueueStatus } from './ai/controlled-task-queue.js';
 import { inspectExecutionGate, getExecutionGateStatus } from './ai/controlled-execution-gate.js';
+import { buildReleaseReadinessReport } from './ai/release-readiness.js';
+app.get('/api/release-readiness',(_req,res)=>res.json(buildReleaseReadinessReport({core:getCoreInfo(),independentCore:getIndependentCoreStatus(),provider:getAIProviderStatus(),media:getMediaProviderStatus(),monitor:getMonitorStatus(),workflow:getWorkflowLimits(),tools:getSafeToolCatalog(),executionGate:getExecutionGateStatus()})));
 app.get('/api/execution-gate/status',(_req,res)=>res.json(getExecutionGateStatus()));
 app.post('/api/execution-gate/inspect',generationLimiter,(req,res)=>{const result=inspectExecutionGate(req.body);if(result.status==='rejected')return res.status(400).json(result);if(result.status==='blocked')return res.status(422).json(result);res.json(result);});
 app.get('/api/compute-worker/status',(_req,res)=>res.json(getComputeWorkerStatus()));

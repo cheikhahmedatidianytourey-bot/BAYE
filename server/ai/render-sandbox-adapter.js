@@ -198,7 +198,9 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
         for (const check of checks) {
           const command = check === 'unit-tests'
             ? 'timeout -k 2 ' + checkTimeoutSeconds + 's bash -lc \'cd ' + PROJECT_DIR + ' && npm test\''
-            : 'timeout -k 2 ' + checkTimeoutSeconds + 's bash -lc \'cd ' + PROJECT_DIR + ' && npm run build\'';
+            : check === 'application-build'
+              ? 'timeout -k 2 ' + checkTimeoutSeconds + 's bash -lc \'cd ' + PROJECT_DIR + ' && npm run build\''
+              : 'timeout -k 2 ' + checkTimeoutSeconds + 's bash -lc \'cd ' + PROJECT_DIR + ' && npm run test:security\'';
           try {
             const result = await execute(sandboxes, sandboxId, command, signal);
             evidence.push({

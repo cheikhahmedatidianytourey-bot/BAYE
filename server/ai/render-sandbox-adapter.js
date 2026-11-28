@@ -5,7 +5,7 @@ const MAX_FILES = 8;
 const MAX_PATCH_BYTES = 12_000;
 const MAX_OUTPUT = 4_000;
 const PROJECT_DIR = '/workspace/BAYE';
-const COMMAND_TIMEOUT_SECONDS = 45;
+const MAX_COMMAND_TIMEOUT_SECONDS = 45;
 const APPLY_TIMEOUT_SECONDS = 15;
 const SANDBOX_LIFETIME_SECONDS = 300;
 const PLAN = '1c-2g';
@@ -186,10 +186,15 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
         );
         if (applied.exitCode !== 0) throw new Error('repair patch rejected in sandbox: ' + bounded(applied.output));
 
+        const overallBudgetMs = Number.isInteger(limits?.timeoutMs) ? limits.timeoutMs : 180000;
+        const checkTimeoutSeconds = Math.max(
+          5,
+          Math.min(MAX_COMMAND_TIMEOUT_SECONDS, Math.floor((overallBudgetMs - 90000) / checks.length / 1000))
+        );
         for (const check of checks) {
           const command = check === 'unit-tests'
-            ? 'timeout -k 2 ' + COMMAND_TIMEOUT_SECONDS + 's bash -lc \'cd ' + PROJECT_DIR + ' && npm test\''
-            : 'timeout -k 2 ' + COMMAND_TIMEOUT_SECONDS + 's bash -lc \'cd ' + PROJECT_DIR + ' && npm run build\'';
+            ? 'timeout -k 2 ' + checkTimeoutSeconds + 's bash -lc \'cd ' + PROJECT_DIR + ' && npm test\''
+            : 'timeout -k 2 ' + checkTimeoutSeconds + 's bash -lc \'cd ' + PROJECT_DIR + ' && npm run build\'';
           try {
             const result = await execute(sandboxes, sandboxId, command, signal);
             evidence.push({

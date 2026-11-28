@@ -259,7 +259,7 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
 export function getRenderSandboxAdapterStatus() {
   return {
     name: 'BAYE Render Sandbox Adapter',
-    milestone: 'G82',
+    milestone: 'G83',
     provider: 'Render Sandboxes',
     sdkVersion: '1.11.0',
     mode: 'pinned snapshot; disposable microVM per validation',

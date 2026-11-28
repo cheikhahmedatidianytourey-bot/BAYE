@@ -136,7 +136,7 @@ test('rejects unsafe patch targets before creating a sandbox', async () => {
 test('documents provider limits, credentials and currently supported checks', () => {
   const status = getRenderSandboxAdapterStatus();
   assert.equal(status.milestone, 'G82');
-  assert.equal(status.sdkVersion, '1.5.0');
+  assert.equal(status.sdkVersion, '1.11.0');
   assert.equal(status.networkPolicy, 'deny-all');
   assert.equal(status.memoryLimitMb, 2048);
   assert.equal(status.cpuCount, 1);

@@ -74,7 +74,7 @@ test('creates a deny-all disposable Render sandbox from the pinned snapshot and 
   assert.equal(Object.hasOwn(calls.create[0], 'env'), false);
   assert.equal(calls.uploads.length, 3);
   assert.ok(calls.uploads[0].data.toString('utf8').includes(env.RENDER_SANDBOX_EXPECTED_COMMIT));
-  assert.match(calls.uploads[0].data.toString('utf8'), /git rev-parse.*HEAD/);
+  assert.ok(calls.uploads[0].data.toString('utf8').includes("['rev-parse', 'HEAD']"));
   assert.equal(calls.uploads[0].path, '/tmp/baye-snapshot-preflight.mjs');
   assert.equal(calls.commands[0].command, 'timeout -k 2 10s node /tmp/baye-snapshot-preflight.mjs');
   assert.ok(calls.commands.findIndex(item => item.command.includes('baye-snapshot-preflight')) < calls.commands.findIndex(item => item.command.includes('baye-apply-repair')));

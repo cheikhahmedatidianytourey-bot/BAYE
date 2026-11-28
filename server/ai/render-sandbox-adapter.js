@@ -71,7 +71,7 @@ if (manifestPaths.length !== expectedManifestFiles.length ||
     expectedManifestFiles.some(file => !manifestPaths.includes(file)) ||
     new Set(manifestPaths).size !== manifestPaths.length) fail('snapshot integrity manifest file set is incomplete or unexpected');
 for (const item of integrityManifest.files) {
-  if (!/^[a-f0-9]{64}$/.test(item.sha256 || '')) fail('invalid SHA-256 in snapshot integrity manifest: ' + item.path);
+  if (!/^[a-f0-9]{64}$/.test(item?.sha256 || '')) fail('invalid SHA-256 in snapshot integrity manifest: ' + item?.path);
   const actual = createHash('sha256').update(fs.readFileSync(path.join(root, item.path))).digest('hex');
   if (actual !== item.sha256) fail('snapshot integrity manifest mismatch: ' + item.path);
 }

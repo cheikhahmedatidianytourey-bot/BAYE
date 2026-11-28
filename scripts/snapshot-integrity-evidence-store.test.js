@@ -34,7 +34,7 @@ test('detects full-ledger truncation, deletion, and byte-level modification', ()
   const checkpoint = createCheckpoint(bytes);
   assert.equal(verifyCheckpoint(Buffer.from(JSON.stringify(first) + '\n'), checkpoint).valid, false);
   assert.equal(verifyCheckpoint(Buffer.alloc(0), checkpoint).valid, false);
-  const altered = Buffer.from(bytes.toString('utf8').replace('first evidence', 'other evidence'));
+  const altered = Buffer.from(bytes.toString('utf8').replace(first.recordHash, 'f'.repeat(64)));
   assert.equal(verifyCheckpoint(altered, checkpoint).valid, false);
 });
 

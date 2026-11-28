@@ -92,7 +92,7 @@ export function createReplicationWatchdog(config, dependencies = {}) {
 
   async function runOnce() {
     if (active) return active;
-    active = Promise.resolve().then(() => {
+    active = Promise.resolve().then(async () => {
       const primaryLedger = readRegularFile(primaryLedgerFile, 'primary ledger');
       const replicaLedger = readRegularFile(replicaLedgerFile, 'replica ledger');
       const timestamp = now();

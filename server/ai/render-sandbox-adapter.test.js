@@ -75,6 +75,12 @@ test('creates a deny-all disposable Render sandbox from the pinned snapshot and 
   assert.equal(calls.uploads.length, 3);
   assert.ok(calls.uploads[0].data.toString('utf8').includes(env.RENDER_SANDBOX_EXPECTED_COMMIT));
   assert.ok(calls.uploads[0].data.toString('utf8').includes("['rev-parse', 'HEAD']"));
+  const preflightScript = calls.uploads[0].data.toString('utf8');
+  assert.ok(preflightScript.includes("createHash('sha256')"));
+  assert.ok(preflightScript.includes("['hash-object', '--no-filters', '--', relative]"));
+  assert.ok(preflightScript.includes("'server/ai/controlled-repair-gate.js'"));
+  assert.ok(preflightScript.includes("'server/ai/repair-sandbox-runner.js'"));
+  assert.ok(preflightScript.includes('critical snapshot file content differs from the pinned Git tree'));
   assert.equal(calls.uploads[0].path, '/tmp/baye-snapshot-preflight.mjs');
   assert.equal(calls.commands[0].command, 'timeout -k 2 10s node /tmp/baye-snapshot-preflight.mjs');
   assert.ok(calls.commands.findIndex(item => item.command.includes('baye-snapshot-preflight')) < calls.commands.findIndex(item => item.command.includes('baye-apply-repair')));
@@ -99,6 +105,27 @@ test('refuses an unready pinned snapshot before uploading or applying a repair p
   assert.equal(calls.commands.length, 1);
   assert.equal(calls.commands[0].command, 'timeout -k 2 10s node /tmp/baye-snapshot-preflight.mjs');
   assert.deepEqual(calls.terminated, ['sbx-test-123']);
+});
+
+test('runs critical-file integrity verification in preflight before any repair upload', async () => {
+  const { client, calls } = fakeClient();
+  const adapter = createRenderSandboxAdapter({ client, env });
+  const result = await adapter.run({ proposal, checks: ['unit-tests'], limits, signal: new AbortController().signal });
+
+  assert.equal(result.status, 'passed');
+  const script = calls.uploads[0].data.toString('utf8');
+  for (const file of [
+    'package.json',
+    'server/ai/render-sandbox-adapter.js',
+    'server/ai/controlled-repair-gate.js',
+    'server/ai/repair-sandbox-runner.js'
+  ]) assert.ok(script.includes("'" + file + "'"));
+  assert.ok(script.includes("createHash('sha256')"));
+  assert.ok(script.includes("['hash-object', '--no-filters', '--', relative]"));
+  assert.ok(calls.commands[0].command.includes('baye-snapshot-preflight'));
+  assert.equal(calls.uploads[1].path, '/tmp/baye-repair-manifest.json');
+  assert.ok(calls.commands.findIndex(item => item.command.includes('baye-snapshot-preflight')) <
+    calls.commands.findIndex(item => item.command.includes('baye-apply-repair')));
 });
 
 test('does not create a sandbox for unsupported security checks', async () => {
@@ -170,7 +197,7 @@ test('rejects unsafe patch targets before creating a sandbox', async () => {
 
 test('documents provider limits, credentials and currently supported checks', () => {
   const status = getRenderSandboxAdapterStatus();
-  assert.equal(status.milestone, 'G85');
+  assert.equal(status.milestone, 'G86');
   assert.equal(status.sdkVersion, '1.11.0');
   assert.equal(status.networkPolicy, 'deny-all');
   assert.equal(status.memoryLimitMb, 2048);

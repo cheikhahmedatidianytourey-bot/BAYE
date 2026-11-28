@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateRepairProposal,evaluateRepairGate,getControlledRepairStatus} from './controlled-repair-gate.js';
+const proposal={id:'repair-1',incidentId:'incident-1',diagnosisCode:'timeout',reason:'Bound the retry loop after confirmed timeout evidence.',changes:[{path:'server/ai/retry.js',operation:'modify',patch:'@@ -1 +1 @@\n-old\n+new'}]};
+test('validates a bounded repair proposal without applying it',()=>{const r=validateRepairProposal(proposal);assert.equal(r.status,'validated');assert.equal(r.fileCount,1);});
+test('blocks proposals until every independent gate is satisfied',()=>{const r=evaluateRepairGate({proposal});assert.equal(r.status,'blocked');assert.equal(r.blockers.length,4);assert.equal(r.execution.applied,false);});
+test('permits manual review only after approval, tests, diagnosis and backup',()=>{const r=evaluateRepairGate({proposal,humanApproval:true,testsPassed:true,diagnosisConfirmed:true,backupVerified:true});assert.equal(r.status,'eligible_for_manual_review');assert.equal(r.execution.filesWritten,0);});
+test('rejects traversal, absolute paths and protected workflow paths',()=>{for(const path of ['../secret.js','/tmp/file.js','.github/workflows/ci.yml','.env'])assert.equal(validateRepairProposal({...proposal,changes:[{...proposal.changes[0],path}]}).status,'rejected');});
+test('rejects excessive files, duplicate paths and oversized patches',()=>{assert.equal(validateRepairProposal({...proposal,changes:Array.from({length:9},(_,i)=>({...proposal.changes[0],path:'src/'+i+'.js'}))}).status,'rejected');assert.equal(validateRepairProposal({...proposal,changes:[proposal.changes[0],proposal.changes[0]]}).status,'rejected');assert.equal(validateRepairProposal({...proposal,changes:[{...proposal.changes[0],patch:'x'.repeat(12001)}]}).status,'rejected');});
+test('rejects missing diagnosis and invalid operation',()=>{assert.equal(validateRepairProposal({...proposal,diagnosisCode:''}).status,'rejected');assert.equal(validateRepairProposal({...proposal,changes:[{...proposal.changes[0],operation:'delete'}]}).status,'rejected');});
+test('reports strict non-writing safety posture',()=>{const s=getControlledRepairStatus();assert.equal(s.appliesPatches,false);assert.equal(s.writesFiles,false);assert.equal(s.repositoryWriteAccess,false);});

@@ -24,7 +24,7 @@ import { buildStudioInstruction } from './studio-engine.js';
 import { validateAppBuilderPrompt, parseGeneratedProject, buildAppBuilderInstruction } from './app-builder.js';
 import { inspectBuildTestRequest } from './project-build-test-api.js';
 import { getOwnedModelDevelopmentStatus, inspectOwnedModelTrainingRequest } from './ai/owned-model-development-api.js';
-import { trainOwnedTextPrototype, getOwnedTextPrototypeStatus } from './ai/owned-text-prototype-trainer.js';
+import { trainOwnedTextPrototype, predictOwnedTextModel, getOwnedTextPrototypeStatus } from './ai/owned-text-prototype-trainer.js';\nimport { saveOwnedModel, loadOwnedModel, listOwnedModels, ownedModelStorageStatus } from './ai/owned-model-storage.js';
 import { inspectTextForVerification, getVerificationEngineStatus } from './ai/verification-engine.js';
 import { validateDatasetRecord, getDataEngineStatus } from './ai/data-engine.js';
 import { inspectDatasetBatch, getDataQualityPipelineStatus } from './ai/data-quality-pipeline.js';

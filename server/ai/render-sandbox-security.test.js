@@ -6,7 +6,8 @@ const env = {
   RENDER_API_KEY: 'test-only-api-key',
   RENDER_WORKSPACE_ID: 'tea-test123',
   RENDER_SANDBOX_GROUP_ID: 'sbg-test',
-  RENDER_SANDBOX_SNAPSHOT_ID: 'snp-test'
+  RENDER_SANDBOX_SNAPSHOT_ID: 'snp-test',
+  RENDER_SANDBOX_EXPECTED_COMMIT: '85efb9c67caa4e3674702ce4ece219a43fd9ce44'
 };
 const proposal = {
   id: 'security-test',

@@ -6,7 +6,7 @@ export function tokenizeOwnedText(text,options={}){
  if(typeof text!=='string'||text.length>MAX_TEXT)return {status:'rejected',error:'Text must be a string of at most 10,000 characters.'};
  const normalized=text.normalize('NFKC').toLocaleLowerCase(options.locale||'und');
  const tokens=normalized.match(tokenPattern)||[];
- const filtered=options.stopWords instanceof Set?tokens.filter(t=>!options.stopWords.has(t):tokens;
+ const filtered=options.stopWords instanceof Set?tokens.filter(t=>!options.stopWords.has(t)):tokens;
  return {status:'ok',tokens:filtered.slice(0,MAX_TOKENS)};
 }
 export function prepareOwnedCorpus(input,options={}){

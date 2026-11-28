@@ -28,6 +28,7 @@ import { inspectTextForVerification, getVerificationEngineStatus } from './ai/ve
 import { validateDatasetRecord, getDataEngineStatus } from './ai/data-engine.js';
 import { inspectDatasetBatch, getDataQualityPipelineStatus } from './ai/data-quality-pipeline.js';
 import { inspectControlledDatasetIntake, getControlledIntakeStatus } from './ai/controlled-dataset-intake.js';
+import { registryReady, initializeDatasetRegistry, registerDatasetEntry, registryEntryFromIntake, listDatasetEntries, getDatasetRegistryStatus } from './ai/dataset-registry.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -52,8 +53,10 @@ app.get('/', (_req,res)=>res.type('text').send('BAYE AI CORE — Gateway online.
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo(),independentCore:getIndependentCoreStatus()}));
 app.get('/api/owned-models/status', (_req,res)=>res.json(getOwnedModelDevelopmentStatus()));
 app.get('/api/verification/status', (_req,res)=>res.json(getVerificationEngineStatus()));
-app.get('/api/data-engine/status', (_req,res)=>res.json({...getDataEngineStatus(),qualityPipeline:getDataQualityPipelineStatus(),controlledIntake:getControlledIntakeStatus()}));
+app.get('/api/data-engine/status', (_req,res)=>res.json({...getDataEngineStatus(),qualityPipeline:getDataQualityPipelineStatus(),controlledIntake:getControlledIntakeStatus(),datasetRegistry:getDatasetRegistryStatus()}));
 app.post('/api/data-engine/intake/preview', generationLimiter, (req,res)=>{const result=inspectControlledDatasetIntake(req.body);if(result.status==='rejected')return res.status(400).json(result);res.status(200).json(result);});
+app.post('/api/data-engine/registry/register', generationLimiter, async(req,res)=>{try{if(!registryReady())return res.status(503).json({error:'Dataset registry database is not configured.'});const intake=inspectControlledDatasetIntake(req.body);if(intake.status==='rejected')return res.status(400).json(intake);const built=registryEntryFromIntake(intake);if(!built.valid)return res.status(400).json(built);res.status(201).json(await registerDatasetEntry(built.entry));}catch(_){res.status(503).json({error:'Dataset registry unavailable.'});}});
+app.get('/api/data-engine/registry/list',generationLimiter,async(req,res)=>{try{if(!registryReady())return res.status(503).json({error:'Dataset registry database is not configured.'});res.json({items:await listDatasetEntries()});}catch(_){res.status(503).json({error:'Dataset registry unavailable.'});}});
 app.post('/api/data-engine/quality/inspect', generationLimiter, (req,res)=>{const result=inspectDatasetBatch(req.body);if(result.status==='rejected')return res.status(400).json(result);res.status(200).json(result);});
 app.post('/api/data-engine/dataset/validate', generationLimiter, (req,res)=>{const result=validateDatasetRecord(req.body);if(!result.valid)return res.status(400).json(result);res.status(202).json(result);});
 app.post('/api/verification/inspect', generationLimiter, (req,res)=>{const result=inspectTextForVerification(req.body);if(result.status==='rejected')return res.status(400).json(result);res.status(200).json(result);});
@@ -287,4 +290,4 @@ app.post('/api/media/generate', mediaLimiter, enforceFreeQuota(req=>req.body?.ty
 app.get('/api/media/status', mediaStatusLimiter, videoStatusHandler);
 // Normalize unexpected errors without exposing stack traces or secrets to clients.
 app.use((err,req,res,next)=>{console.error('Unhandled API error',err?.message||err);if(res.headersSent)return next(err);res.status(500).json({error:'Erreur interne. Réessaie plus tard.'});});
-const port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>{console.log('BAYE AI gateway listening on '+port);startPeriodicMonitor();if(dbReady())initializeAccountQuotaDb().then(()=>console.log('BAYE account/quota database initialized')).catch(err=>console.error('BAYE account DB initialization failed:',err.message));});
+const port=process.env.PORT||10000;app.listen(port,'0.0.0.0',()=>{console.log('BAYE AI gateway listening on '+port);startPeriodicMonitor();if(dbReady())initializeAccountQuotaDb().then(()=>console.log('BAYE account/quota database initialized')).catch(err=>console.error('BAYE account DB initialization failed:',err.message));if(registryReady())initializeDatasetRegistry().then(()=>console.log('BAYE dataset registry initialized')).catch(err=>console.error('BAYE dataset registry initialization failed:',err.message));});

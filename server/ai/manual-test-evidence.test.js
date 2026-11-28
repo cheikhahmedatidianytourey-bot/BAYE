@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateManualTestEvidence} from './manual-test-evidence.js';
+const base={featureId:'app-builder',testCase:'Generate a small project and inspect files',outcome:'passed',notes:'Generated and inspected.',evidenceRefs:['https://example.test/evidence'],testedAt:'2026-11-28T10:00:00Z'};
+test('accepts bounded complete test evidence',()=>{const r=validateManualTestEvidence(base);assert.equal(r.valid,true);assert.equal(r.normalized.featureId,'app-builder');});
+test('rejects unknown outcomes',()=>{assert.equal(validateManualTestEvidence({...base,outcome:'certified'}).valid,false);});
+test('requires notes for failures',()=>{assert.equal(validateManualTestEvidence({...base,outcome:'failed',notes:''}).valid,false);});
+test('rejects excessive evidence references',()=>{assert.equal(validateManualTestEvidence({...base,evidenceRefs:Array(11).fill('x')}).valid,false);});
+test('rejects invalid date strings',()=>{assert.equal(validateManualTestEvidence({...base,testedAt:'not-a-date'}).valid,false);});
+test('rejects oversized notes',()=>{assert.equal(validateManualTestEvidence({...base,notes:'x'.repeat(2001)}).valid,false);});
+test('rejects array instead of object',()=>{assert.equal(validateManualTestEvidence([]).valid,false);});

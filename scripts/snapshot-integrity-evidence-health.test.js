@@ -47,7 +47,7 @@ test('detects replication lag and persists subsequent recovery to healthy', () =
     const replica = path.join(root, 'replica');
     const journal = path.join(root, 'journal');
     persistDurableCheckpoint(primary, first);
-    persistDurableCheckpoint(replica, first);
+    replicateDurableEvidenceStore(primary, replica, first);
     persistDurableCheckpoint(primary, second);
     assert.equal(monitorEvidenceReplication(primary, replica, second, journal).status, 'replication_lag');
     replicateDurableEvidenceStore(primary, replica, second);
@@ -64,9 +64,10 @@ test('distinguishes same-sequence divergent histories', () => {
     const bytes = ledger(1);
     const primary = path.join(root, 'primary');
     const replica = path.join(root, 'replica');
-    persistDurableCheckpoint(primary, bytes, { rootAnchor: 'a'.repeat(64) });
-    persistDurableCheckpoint(replica, bytes, { rootAnchor: 'b'.repeat(64) });
-    const result = monitorEvidenceReplication(primary, replica, bytes, path.join(root, 'journal'));
+    const replicaBytes = ledger(2);
+    persistDurableCheckpoint(primary, bytes);
+    persistDurableCheckpoint(replica, replicaBytes);
+    const result = monitorEvidenceReplication(primary, replica, bytes, path.join(root, 'journal'), { replicaLedgerBytes: replicaBytes });
     assert.equal(result.status, 'divergence');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

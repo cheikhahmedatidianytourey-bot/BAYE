@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {buildReleaseReadinessReport} from '../server/ai/release-readiness.js';
+test('readiness report is conservative and non-certifying',()=>{const r=buildReleaseReadinessReport({core:{}});assert.equal(r.releaseReady,false);assert.equal(r.releaseDeclared,false);assert.equal(r.executionEnabled,false);assert.equal(r.validatedFeatureCount,0);});
+test('inventory exposes user testing checklist',()=>{const r=buildReleaseReadinessReport();assert.ok(r.featureCount>=10);assert.ok(r.checklist.every(x=>x.validatedByUser===false));assert.ok(r.testingProtocol.length>=4);});
+test('report limits signal list to supplied keys',()=>{const r=buildReleaseReadinessReport({core:{},unknown:1});assert.deepEqual(r.signalsPresent,['core','unknown']);});

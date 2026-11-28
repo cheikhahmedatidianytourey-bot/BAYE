@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {inspectControlledDatasetIntake,getControlledIntakeStatus} from '../server/ai/controlled-dataset-intake.js';
+const dataset={name:'Sample',source:'user-supplied',license:'CC0',description:'Example dataset',modality:'text',personalData:false,licenseReviewed:true};
+test('valid intake preview produces provenance receipt',()=>{const r=inspectControlledDatasetIntake({dataset,records:[{text:'hello'},{text:'world'}]});assert.equal(r.status,'processed');assert.equal(r.receipt.algorithm,'sha256');assert.equal(r.receipt.digest.length,64);assert.equal(r.provenance.acceptedRecordCount,2);assert.equal(r.trainingEnabled,false);});
+test('requires explicit license review',()=>{const r=inspectControlledDatasetIntake({dataset:{...dataset,licenseReviewed:false},records:[{x:1}]});assert.equal(r.status,'rejected');});
+test('requires privacy review for personal data',()=>{const r=inspectControlledDatasetIntake({dataset:{...dataset,personalData:true},records:[{x:1}]});assert.equal(r.status,'rejected');});
+test('accepts declared completed privacy review',()=>{const r=inspectControlledDatasetIntake({dataset:{...dataset,personalData:true,privacyReview:'completed'},records:[{x:1}]});assert.equal(r.status,'processed');});
+test('rejects missing provenance and malformed batches',()=>{assert.equal(inspectControlledDatasetIntake({records:[{x:1}]}).status,'rejected');assert.equal(inspectControlledDatasetIntake({dataset,records:[]}).status,'rejected');});
+test('receipt is stable for identical accepted content',()=>{const a=inspectControlledDatasetIntake({dataset,records:[{a:1,b:2}]});const b=inspectControlledDatasetIntake({dataset,records:[{b:2,a:1}]});assert.equal(a.receipt.digest,b.receipt.digest);});
+test('status exposes no persistence or training claims',()=>{const s=getControlledIntakeStatus();assert.equal(s.storage,'none');assert.equal(s.trainingEnabled,false);});

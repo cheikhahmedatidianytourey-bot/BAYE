@@ -8,8 +8,7 @@ const checkpointName = sequence => 'checkpoint-' + String(sequence).padStart(8, 
 const ledgerName = sequence => 'ledger-' + String(sequence).padStart(8, '0') + '.jsonl';
 
 function ledgerPrefix(ledgerBytes, recordCount) {
-  const text = ledgerBytes.toString('utf8');
-  const lines = text.split('\n');
+  const lines = ledgerBytes.toString('utf8').split('\n');
   if (lines.at(-1) === '') lines.pop();
   if (lines.length < recordCount) throw new Error('ledger does not contain the checkpoint prefix');
   return Buffer.from(lines.slice(0, recordCount).join('\n') + '\n');
@@ -27,12 +26,11 @@ function checkedDirectory(directory, create = false) {
 function regularFile(directory, name) {
   const filename = path.join(directory, name);
   const stat = fs.lstatSync(filename);
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('replication source contains a non-regular file: ' + name);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('replication contains a non-regular file: ' + name);
   return filename;
 }
 
-function copyExclusive(source, destination) {
-  const bytes = fs.readFileSync(source);
+function writeExclusive(destination, bytes) {
   let fd;
   try {
     fd = fs.openSync(destination, 'wx', 0o600);
@@ -67,18 +65,16 @@ function writeLatestAtomic(directory, bytes) {
 
 function readLatest(directory) {
   const filename = regularFile(directory, 'latest.json');
-  return { filename, bytes: fs.readFileSync(filename), value: JSON.parse(fs.readFileSync(filename, 'utf8')) };
+  const bytes = fs.readFileSync(filename);
+  return { bytes, value: JSON.parse(bytes.toString('utf8')) };
 }
 
-/**
- * Replicates a verified local evidence history into a second independently managed
- * directory. Existing generations are never overwritten; a replica can only advance.
- */
 export function replicateDurableEvidenceStore(sourceDirectory, replicaDirectory, ledgerBytes) {
   if (!Buffer.isBuffer(ledgerBytes)) throw new TypeError('ledgerBytes must be a Buffer');
   const source = checkedDirectory(sourceDirectory);
   const replica = checkedDirectory(replicaDirectory, true);
   if (source === replica) throw new Error('source and replica directories must be different');
+
   const sourceCheck = recoverDurableEvidenceStore(source, ledgerBytes);
   const sourceLatest = readLatest(source);
   const sourceSequence = sourceLatest.value.sequence;
@@ -93,22 +89,30 @@ export function replicateDurableEvidenceStore(sourceDirectory, replicaDirectory,
     replicaSequence = current.value.sequence;
     if (replicaSequence > sourceSequence) throw new Error('replica is ahead of source; refusing rollback');
   } else {
-    const orphaned = fs.readdirSync(replica).filter(name => /^checkpoint-\\d{8}\\.json$/.test(name));
-    if (orphaned.length) throw new Error('replica has orphaned checkpoint files without a latest manifest');
+    const orphaned = fs.readdirSync(replica).filter(name => /^checkpoint-\d{8}\.json$/.test(name) || /^ledger-\d{8}\.jsonl$/.test(name));
+    if (orphaned.length) throw new Error('replica has orphaned files without a latest manifest');
   }
 
   for (let sequence = 1; sequence <= replicaSequence; sequence += 1) {
-    const name = checkpointName(sequence);
-    const sourceFile = regularFile(source, name);
-    const replicaFile = regularFile(replica, name);
-    if (sha256(fs.readFileSync(sourceFile)) !== sha256(fs.readFileSync(replicaFile))) {
-      throw new Error('replica history diverges at ' + name);
+    const checkpoint = checkpointName(sequence);
+    const sourceCheckpoint = regularFile(source, checkpoint);
+    const replicaCheckpoint = regularFile(replica, checkpoint);
+    if (sha256(fs.readFileSync(sourceCheckpoint)) !== sha256(fs.readFileSync(replicaCheckpoint))) {
+      throw new Error('replica history diverges at ' + checkpoint);
     }
+    const sourceLedger = ledgerPrefix(ledgerBytes, JSON.parse(fs.readFileSync(sourceCheckpoint, 'utf8')).recordCount);
+    const replicaLedger = fs.readFileSync(regularFile(replica, ledgerName(sequence)));
+    if (sha256(sourceLedger) !== sha256(replicaLedger)) throw new Error('replica ledger history diverges at sequence ' + sequence);
   }
 
   for (let sequence = replicaSequence + 1; sequence <= sourceSequence; sequence += 1) {
-    const name = checkpointName(sequence);
-    copyExclusive(regularFile(source, name), path.join(replica, name));
+    const checkpoint = checkpointName(sequence);
+    const checkpointBytes = fs.readFileSync(regularFile(source, checkpoint));
+    const checkpointValue = JSON.parse(checkpointBytes.toString('utf8'));
+    const prefix = ledgerPrefix(ledgerBytes, checkpointValue.recordCount);
+    if (sha256(prefix) !== checkpointValue.ledgerSha256) throw new Error('source ledger prefix digest mismatch at sequence ' + sequence);
+    writeExclusive(path.join(replica, checkpoint), checkpointBytes);
+    writeExclusive(path.join(replica, ledgerName(sequence)), prefix);
   }
 
   writeLatestAtomic(replica, sourceLatest.bytes);
@@ -126,7 +130,16 @@ export function replicateDurableEvidenceStore(sourceDirectory, replicaDirectory,
   };
 }
 
-/** Recover from the replica alone after the primary store is unavailable. */
 export function recoverFromDurableEvidenceReplica(replicaDirectory, ledgerBytes) {
-  return recoverDurableEvidenceStore(checkedDirectory(replicaDirectory), ledgerBytes);
+  const replica = checkedDirectory(replicaDirectory);
+  let bytes = ledgerBytes;
+  if (bytes === undefined) {
+    const latest = readLatest(replica).value;
+    const checkpoint = JSON.parse(fs.readFileSync(regularFile(replica, checkpointName(latest.sequence)), 'utf8'));
+    bytes = fs.readFileSync(regularFile(replica, ledgerName(latest.sequence)));
+    if (sha256(bytes) !== checkpoint.ledgerSha256) throw new Error('replica ledger digest does not match its checkpoint');
+  }
+  if (!Buffer.isBuffer(bytes)) throw new TypeError('ledgerBytes must be a Buffer when supplied');
+  const result = recoverDurableEvidenceStore(replica, bytes);
+  return { ...result, ledgerBytes: bytes, recoveredFromReplica: true };
 }

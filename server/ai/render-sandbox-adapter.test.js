@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRenderSandboxAdapter, getRenderSandboxAdapterStatus } from './render-sandbox-adapter.js';
+import { createRenderSandboxAdapter, getRenderSandboxAdapterStatus, runRepairSandboxOnRender } from './render-sandbox-adapter.js';
 
 const env = {
   RENDER_API_KEY: 'test-only-api-key',
@@ -142,4 +142,31 @@ test('documents provider limits, credentials and currently supported checks', ()
   assert.equal(status.cpuCount, 1);
   assert.equal(status.apiKeyInjectedIntoSandbox, false);
   assert.deepEqual(status.supportedChecks, ['unit-tests', 'application-build']);
+});
+
+test('connects the Render adapter to G81 and keeps the human approval gates active', async () => {
+  const { client, calls } = fakeClient();
+  const input = {
+    proposal: {
+      ...proposal,
+      incidentId: 'incident-test',
+      diagnosisCode: 'test-failure',
+      reason: 'Apply a bounded test repair after evidence review.'
+    },
+    humanApproval: true,
+    testsPassed: true,
+    diagnosisConfirmed: true,
+    backupVerified: true,
+    checks: ['unit-tests']
+  };
+  const result = await runRepairSandboxOnRender(input, { client, env });
+  assert.equal(result.status, 'passed');
+  assert.equal(result.proposalId, 'repair-test');
+  assert.equal(result.sandboxId, 'sbx-test-123');
+  assert.equal(result.cleanupStatus, 'terminated');
+  assert.equal(result.execution.repositoryModified, false);
+
+  const blocked = await runRepairSandboxOnRender({ ...input, humanApproval: false }, { client, env });
+  assert.equal(blocked.status, 'blocked');
+  assert.equal(calls.create.length, 1);
 });

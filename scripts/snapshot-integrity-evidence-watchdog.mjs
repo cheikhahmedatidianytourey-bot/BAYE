@@ -76,6 +76,8 @@ export function createReplicationWatchdog(config, dependencies = {}) {
   const primaryLedgerFile = path.resolve(config.primaryLedgerFile);
   const replicaLedgerFile = path.resolve(config.replicaLedgerFile || config.primaryLedgerFile);
   const stateFile = path.resolve(config.stateFile || path.join(journalDirectory, 'replication-watch-state.json'));
+  readRegularFile(primaryLedgerFile, 'primary ledger');
+  readRegularFile(replicaLedgerFile, 'replica ledger');
   const intervalMs = config.intervalMs ?? DEFAULT_INTERVAL_MS;
   if (!Number.isSafeInteger(intervalMs) || intervalMs < MIN_INTERVAL_MS || intervalMs > MAX_INTERVAL_MS) {
     throw new RangeError('intervalMs must be between 60000 and 3600000');
@@ -94,7 +96,7 @@ export function createReplicationWatchdog(config, dependencies = {}) {
       const primaryLedger = readRegularFile(primaryLedgerFile, 'primary ledger');
       const replicaLedger = readRegularFile(replicaLedgerFile, 'replica ledger');
       const timestamp = now();
-      const result = monitor(primaryDirectory, replicaDirectory, primaryLedger, journalDirectory, { replicaLedgerBytes: replicaLedger, timestamp });
+      const result = await monitor(primaryDirectory, replicaDirectory, primaryLedger, journalDirectory, { replicaLedgerBytes: replicaLedger, timestamp });
       state = saveState(stateFile, state, result, timestamp);
       lastResult = { ...result, watchState: state };
       return lastResult;

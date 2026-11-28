@@ -25,4 +25,8 @@ export function resolveFaultIncident(id,reason='manual resolution'){
  if(typeof reason!=='string'||reason.length>300)return {status:'rejected',errors:['reason must be at most 300 characters']};
  record.status='resolved';record.resolvedAt=new Date().toISOString();record.resolutionReason=reason;return {status:'resolved',incident:record};
 }
+export function restoreFaultIncidents(records=[]){
+ if(!Array.isArray(records))return {status:'rejected',restored:0};
+ let restored=0;for(const r of records.slice(0,LIMIT)){if(!r||typeof r.id!=='string'||typeof r.path!=='string'||typeof r.category!=='string'||typeof r.severity!=='string'||typeof r.status!=='string')continue;const current=incidents.get(r.id);if(!current||String(r.lastSeen||'')>String(current.lastSeen||'')){incidents.set(r.id,{...r});restored++;}}return {status:'restored',restored,count:incidents.size};
+}
 export function getIncidentTrackingStatus(){return {module:'G71 incident tracker',storage:'in-memory',persistent:false,capacity:LIMIT,count:incidents.size};}

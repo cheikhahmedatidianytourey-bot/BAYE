@@ -7,7 +7,11 @@ const nav=[['Accueil','⌂'],['Studio','✦'],['Academy','A'],['Motion','◈'],[
 function Status({tone='good',children}){return <span className={'status '+tone}><i/>{children}</span>}
 function Brand(){return <div className="brand"><div className="brandMark">B</div><div><b>BAYE</b><small>BY WEMAD</small></div></div>}
 export default function App(){
- const [tab,setTab]=useState('Accueil'),[kind,setKind]=useState('Texte'),[prompt,setPrompt]=useState(''),[result,setResult]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[copied,setCopied]=useState(false);\n const [capabilities,setCapabilities]=useState(null);\n useEffect(()=>{let active=true;fetch(API+'/api/capabilities').then(r=>{if(!r.ok)throw new Error('Statut indisponible');return r.json()}).then(data=>{if(active)setCapabilities(data)}).catch(()=>{if(active)setCapabilities({unavailable:true} )});return()=>{active=false}},[]);\n const imageConfigured=capabilities?.media?.image?.configured===true;\n const videoConfigured=capabilities?.media?.video?.configured===true;
+ const [tab,setTab]=useState('Accueil'),[kind,setKind]=useState('Texte'),[prompt,setPrompt]=useState(''),[result,setResult]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[copied,setCopied]=useState(false);
+ const [capabilities,setCapabilities]=useState(null);
+ useEffect(()=>{let active=true;fetch(API+'/api/capabilities').then(r=>{if(!r.ok)throw new Error('Statut indisponible');return r.json()}).then(data=>{if(active)setCapabilities(data)}).catch(()=>{if(active)setCapabilities({unavailable:true} )});return()=>{active=false}},[]);
+ const imageConfigured=capabilities?.media?.image?.configured===true;
+ const videoConfigured=capabilities?.media?.video?.configured===true;
  const [mediaType,setMediaType]=useState('image'),[mediaPrompt,setMediaPrompt]=useState(''),[imageUrl,setImageUrl]=useState(''),[mediaId,setMediaId]=useState(''),[mediaStatus,setMediaStatus]=useState(''),[mediaResult,setMediaResult]=useState(null),[mediaError,setMediaError]=useState('');
  const [humanFocus,setHumanFocus]=useState(true),[characterConsistency,setCharacterConsistency]=useState(true),[videoLook,setVideoLook]=useState('live-action');
  const openStudio=(k='Texte')=>{setKind(k);setTab('Studio');setError('')};

@@ -53,7 +53,7 @@ function run() {
   const ledger = path.join(dir, 'evidence-chain.jsonl');
   const anchor = process.env.BAYE_EVIDENCE_PREVIOUS_HASH || ZERO_HASH;
   const entries = readLedger(ledger);
-  const state = verifyChain(entries, { expectedPreviousHash: anchor });
+  const state = entries.length === 0\n    ? { valid: true, checked: 0, tailHash: null, error: null }\n    : verifyChain(entries, { expectedPreviousHash: anchor });
   if (!state.valid) throw new Error('existing chain rejected: ' + state.error);
   if (process.argv.includes('--verify')) {
     process.stdout.write('BAYE evidence chain verified: ' + state.checked + ' record(s); tail=' + (state.tailHash || anchor) + '\n');

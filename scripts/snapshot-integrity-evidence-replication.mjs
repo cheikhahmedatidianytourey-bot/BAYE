@@ -9,10 +9,10 @@ const ledgerName = sequence => 'ledger-' + String(sequence).padStart(8, '0') + '
 
 function ledgerPrefix(ledgerBytes, recordCount) {
   const text = ledgerBytes.toString('utf8');
-  const lines = text.split('\\n');
+  const lines = text.split('\n');
   if (lines.at(-1) === '') lines.pop();
   if (lines.length < recordCount) throw new Error('ledger does not contain the checkpoint prefix');
-  return Buffer.from(lines.slice(0, recordCount).join('\\n') + '\\n');
+  return Buffer.from(lines.slice(0, recordCount).join('\n') + '\n');
 }
 
 function checkedDirectory(directory, create = false) {

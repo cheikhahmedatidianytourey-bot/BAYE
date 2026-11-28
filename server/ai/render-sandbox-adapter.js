@@ -17,6 +17,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const root = '/workspace/BAYE';
+const expectedCommit = '__BAYE_EXPECTED_COMMIT__';
 function fail(message) {
   process.stderr.write('BAYE snapshot preflight failed: ' + message + '\n');
   process.exit(1);
@@ -24,6 +25,8 @@ function fail(message) {
 if (!fs.existsSync(root) || fs.realpathSync(root) !== root) fail('expected project root is missing or redirected');
 const gitRoot = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' });
 if (gitRoot.status !== 0 || gitRoot.stdout.trim() !== root) fail('snapshot is not a valid BAYE Git checkout');
+const actualCommit = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
+if (actualCommit.status !== 0 || actualCommit.stdout.trim() !== expectedCommit) fail('snapshot commit does not match the trusted expected BAYE revision');
 const gitStatus = spawnSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, encoding: 'utf8' });
 if (gitStatus.status !== 0 || gitStatus.stdout.trim()) fail('snapshot checkout must be clean');
 const nodeMajor = Number(process.versions.node.split('.')[0]);
@@ -100,23 +103,31 @@ for (const args of [['apply', '--check'], ['apply']]) {
 }
 `;
 
+function buildPreflightScript(expectedCommit) {
+  return PREFLIGHT_SCRIPT.replace('__BAYE_EXPECTED_COMMIT__', expectedCommit);
+}
+
 function bounded(value, max = 500) {
   return String(value ?? '').slice(0, max);
 }
 
 function readConfig(env) {
-  const required = ['RENDER_API_KEY', 'RENDER_WORKSPACE_ID', 'RENDER_SANDBOX_GROUP_ID', 'RENDER_SANDBOX_SNAPSHOT_ID'];
+  const required = ['RENDER_API_KEY', 'RENDER_WORKSPACE_ID', 'RENDER_SANDBOX_GROUP_ID', 'RENDER_SANDBOX_SNAPSHOT_ID', 'RENDER_SANDBOX_EXPECTED_COMMIT'];
   const missing = required.filter(key => typeof env[key] !== 'string' || !env[key].trim());
   if (missing.length) throw new Error('Render sandbox configuration missing: ' + missing.join(', '));
   if (!/^tea-[A-Za-z0-9]+$/.test(env.RENDER_WORKSPACE_ID)) {
     throw new Error('RENDER_WORKSPACE_ID must identify the intended Render workspace');
+  }
+  if (!/^[a-f0-9]{40}$/.test(env.RENDER_SANDBOX_EXPECTED_COMMIT)) {
+    throw new Error('RENDER_SANDBOX_EXPECTED_COMMIT must be a full 40-character Git commit SHA');
   }
   if (env.RENDER_SANDBOX_PLAN && env.RENDER_SANDBOX_PLAN !== PLAN) {
     throw new Error('only the verified 1c-2g sandbox plan is supported by this adapter');
   }
   return {
     groupId: env.RENDER_SANDBOX_GROUP_ID,
-    snapshotId: env.RENDER_SANDBOX_SNAPSHOT_ID
+    snapshotId: env.RENDER_SANDBOX_SNAPSHOT_ID,
+    expectedCommit: env.RENDER_SANDBOX_EXPECTED_COMMIT
   };
 }
 
@@ -213,7 +224,7 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
         await sandboxes.upload(
           sandboxId,
           '/tmp/baye-snapshot-preflight.mjs',
-          Buffer.from(PREFLIGHT_SCRIPT, 'utf8'),
+          Buffer.from(buildPreflightScript(config.expectedCommit), 'utf8'),
           undefined,
           { signal }
         );
@@ -321,7 +332,7 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
 export function getRenderSandboxAdapterStatus() {
   return {
     name: 'BAYE Render Sandbox Adapter',
-    milestone: 'G84',
+    milestone: 'G85',
     provider: 'Render Sandboxes',
     sdkVersion: '1.11.0',
     mode: 'pinned snapshot; disposable microVM per validation',
@@ -335,7 +346,8 @@ export function getRenderSandboxAdapterStatus() {
       'RENDER_API_KEY',
       'RENDER_WORKSPACE_ID',
       'RENDER_SANDBOX_GROUP_ID',
-      'RENDER_SANDBOX_SNAPSHOT_ID'
+      'RENDER_SANDBOX_SNAPSHOT_ID',
+      'RENDER_SANDBOX_EXPECTED_COMMIT'
     ],
     apiKeyInjectedIntoSandbox: false,
     appliesPatchesToRepository: false,

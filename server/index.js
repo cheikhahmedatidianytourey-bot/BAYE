@@ -62,8 +62,10 @@ app.get('/api/training-engine/status', (_req,res)=>res.json(getTrainingEngineSta
 import { enqueueControlledTask, updateControlledTaskStage, getControlledTask, listControlledTasks, getControlledTaskQueueStatus } from './ai/controlled-task-queue.js';
 import { inspectExecutionGate, getExecutionGateStatus } from './ai/controlled-execution-gate.js';
 import { buildReleaseReadinessReport } from './ai/release-readiness.js';
+import { runLocalApiDiagnostics } from './ai/api-health-diagnostics.js';
 import { recordManualTest, listManualTests, getManualTest, getManualTestLedgerStatus } from './ai/manual-test-evidence-ledger.js';
 import { manualEvidenceStorageReady, initializeManualEvidenceStorage, persistManualEvidence, listPersistentManualEvidence, getPersistentManualEvidence, getManualEvidenceStorageStatus } from './ai/manual-test-evidence-storage.js';
+app.get('/api/diagnostics/self-test',(req,res)=>{const token=process.env.BAYE_DIAGNOSTICS_TOKEN;if(typeof token!=='string'||token.length<32)return res.status(503).json({error:'Diagnostics token is not securely configured.'});if(!secureBearerMatch(req,token))return res.status(401).json({error:'Unauthorized'});runLocalApiDiagnostics().then(result=>res.status(result.healthy?200:503).json(result)).catch(()=>res.status(503).json({error:'Diagnostics unavailable.'}));});
 app.get('/api/release-readiness',(_req,res)=>res.json(buildReleaseReadinessReport({core:getCoreInfo(),independentCore:getIndependentCoreStatus(),provider:getAIProviderStatus(),media:getMediaProviderStatus(),monitor:getMonitorStatus(),workflow:getWorkflowLimits(),tools:getSafeToolCatalog(),executionGate:getExecutionGateStatus()})));
 app.use('/api/manual-tests/persistent-evidence',(req,res,next)=>{const token=process.env.BAYE_MANUAL_EVIDENCE_TOKEN;if(typeof token!=='string'||token.length<32)return res.status(503).json({error:'Manual evidence access token is not securely configured.'});if(!secureBearerMatch(req,token))return res.status(401).json({error:'Unauthorized'});next();});
 app.get('/api/manual-tests/persistent-evidence/status',async(_req,res)=>res.json(await getManualEvidenceStorageStatus()));

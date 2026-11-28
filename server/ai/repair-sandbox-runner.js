@@ -1,11 +1,10 @@
-// G81: bounded contract for testing repair proposals in a disposable isolated workspace.
-// This orchestrator does not create an OS sandbox. A trusted host adapter must enforce isolation.
+// G81/G82: bounded repair validation orchestration backed by a trusted disposable sandbox host.
 import { evaluateRepairGate } from './controlled-repair-gate.js';
 
-const MAX_CHECKS = 4;
-const MAX_TIMEOUT_MS = 10000;
+const MAX_CHECKS = 2;
+const MAX_TIMEOUT_MS = 240000;
 const MAX_SUMMARY = 500;
-const ALLOWED_CHECKS = new Set(['unit-tests', 'application-build', 'security-tests']);
+const ALLOWED_CHECKS = new Set(['unit-tests', 'application-build']);
 const REQUIRED_CAPABILITIES = {
   isolatedExecution: true,
   disposableWorkspace: true,
@@ -18,12 +17,12 @@ const REQUIRED_CAPABILITIES = {
 
 function validateChecks(checks) {
   if (!Array.isArray(checks) || checks.length < 1 || checks.length > MAX_CHECKS) {
-    return { status: 'rejected', error: 'checks must contain 1–4 approved validation checks' };
+    return { status: 'rejected', error: 'checks must contain 1–2 approved validation checks' };
   }
   const seen = new Set();
   for (const check of checks) {
     if (typeof check !== 'string' || !ALLOWED_CHECKS.has(check)) {
-      return { status: 'rejected', error: 'validation check is not allow-listed' };
+      return { status: 'rejected', error: 'validation check is not allow-listed or is not yet implemented' };
     }
     if (seen.has(check)) return { status: 'rejected', error: 'duplicate validation check' };
     seen.add(check);
@@ -68,7 +67,13 @@ function normalizeAdapterResult(raw, expectedChecks) {
   }
   const checks = expectedChecks.map(id => byId.get(id));
   const passed = checks.every(item => item.status === 'passed');
-  return { status: passed && raw.status === 'passed' ? 'passed' : 'failed', checks };
+  return {
+    status: passed && raw.status === 'passed' ? 'passed' : 'failed',
+    checks,
+    ...(typeof raw.error === 'string' ? { error: raw.error.slice(0, MAX_SUMMARY) } : {}),
+    ...(typeof raw.sandboxId === 'string' ? { sandboxId: raw.sandboxId.slice(0, 120) } : {}),
+    ...(typeof raw.cleanupStatus === 'string' ? { cleanupStatus: raw.cleanupStatus.slice(0, 40) } : {})
+  };
 }
 
 export async function runRepairSandbox(input, adapter) {
@@ -90,17 +95,18 @@ export async function runRepairSandbox(input, adapter) {
   const adapterError = validateAdapter(adapter);
   if (adapterError) return { status: 'rejected', error: adapterError };
 
-  const timeoutMs = input.timeoutMs === undefined ? 8000 : input.timeoutMs;
+  const timeoutMs = input.timeoutMs === undefined ? 210000 : input.timeoutMs;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > MAX_TIMEOUT_MS) {
-    return { status: 'rejected', error: 'timeoutMs must be an integer from 100 to 10000' };
+    return { status: 'rejected', error: 'timeoutMs must be an integer from 100 to 240000' };
   }
 
   const controller = new AbortController();
   let timer;
   const limits = Object.freeze({
     timeoutMs,
-    memoryLimitMb: 256,
-    cpuTimeLimitMs: Math.min(timeoutMs, 8000),
+    memoryLimitMb: 2048,
+    cpuCount: 1,
+    sandboxRuntimeSeconds: 300,
     maxFiles: 8,
     maxPatchBytesPerFile: 12000,
     networkAccess: false,
@@ -118,7 +124,7 @@ export async function runRepairSandbox(input, adapter) {
     const timeout = new Promise((_, reject) => {
       timer = setTimeout(() => {
         controller.abort();
-        reject(new Error('sandbox execution timed out'));
+        reject(new Error('sandbox orchestration timed out'));
       }, timeoutMs);
     });
     const raw = await Promise.race([execution, timeout]);
@@ -157,11 +163,14 @@ export function getRepairSandboxStatus() {
   return {
     name: 'BAYE Repair Sandbox Orchestrator',
     milestone: 'G81',
-    version: '0.1.0',
-    mode: 'host-adapter contract; no built-in OS sandbox',
+    version: '0.2.0',
+    mode: 'trusted host adapter; Render Sandbox integration supplied by G82',
     limits: {
       maxTimeoutMs: MAX_TIMEOUT_MS,
-      memoryLimitMb: 256,
+      defaultTimeoutMs: 210000,
+      memoryLimitMb: 2048,
+      cpuCount: 1,
+      sandboxRuntimeSeconds: 300,
       maxChecks: MAX_CHECKS,
       maxFiles: 8,
       maxPatchBytesPerFile: 12000

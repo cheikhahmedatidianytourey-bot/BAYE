@@ -27,7 +27,7 @@ const adapter = {
 };
 
 test('runs allow-listed checks through an explicitly injected isolated host adapter', async () => {
-  const result = await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests', 'security-tests'] }, adapter);
+  const result = await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests', 'application-build'] }, adapter);
   assert.equal(result.status, 'passed');
   assert.equal(result.checks.length, 2);
   assert.equal(result.execution.repositoryModified, false);
@@ -49,7 +49,8 @@ test('rejects missing adapter and adapter without strict isolation capabilities'
 test('rejects arbitrary commands, duplicate checks and excessive timeout', async () => {
   assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['node -e malicious'] }, adapter)).status, 'rejected');
   assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests', 'unit-tests'] }, adapter)).status, 'rejected');
-  assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests'], timeoutMs: 20000 }, adapter)).status, 'rejected');
+  assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests'], timeoutMs: 300000 }, adapter)).status, 'rejected');
+  assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['security-tests'] }, adapter)).status, 'rejected');
 });
 
 test('rejects incomplete, duplicate or malformed adapter evidence', async () => {
@@ -58,6 +59,23 @@ test('rejects incomplete, duplicate or malformed adapter evidence', async () => 
   assert.equal(result.status, 'failed');
   const duplicate = { ...adapter, async run() { return { status: 'passed', checks: [{ id: 'unit-tests', status: 'passed' }, { id: 'unit-tests', status: 'passed' }] }; } };
   assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests'] }, duplicate)).status, 'failed');
+});
+
+test('preserves sandbox identity and cleanup evidence from the host adapter', async () => {
+  const withMetadata = {
+    ...adapter,
+    async run({ checks }) {
+      return {
+        status: 'passed',
+        sandboxId: 'sbx-test',
+        cleanupStatus: 'terminated',
+        checks: checks.map(id => ({ id, status: 'passed' }))
+      };
+    }
+  };
+  const result = await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests'] }, withMetadata);
+  assert.equal(result.sandboxId, 'sbx-test');
+  assert.equal(result.cleanupStatus, 'terminated');
 });
 
 test('reports failures and bounds returned summaries', async () => {
@@ -82,15 +100,17 @@ test('signals timeout to the host adapter and returns bounded failure', async ()
   };
   const result = await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests'], timeoutMs: 100 }, slow);
   assert.equal(result.status, 'failed');
-  assert.equal(result.error, 'sandbox execution timed out');
+  assert.equal(result.error, 'sandbox orchestration timed out');
   assert.equal(receivedSignal.aborted, true);
 });
 
-test('exposes honest sandbox boundaries and fixed resource budgets', () => {
+test('exposes the verified Render-compatible resource envelope and safety boundaries', () => {
   const status = getRepairSandboxStatus();
   assert.equal(status.milestone, 'G81');
   assert.equal(status.requiresTrustedHostAdapter, true);
   assert.equal(status.builtInProcessExecution, false);
   assert.equal(status.networkAccess, false);
-  assert.equal(status.limits.memoryLimitMb, 256);
+  assert.equal(status.limits.memoryLimitMb, 2048);
+  assert.equal(status.limits.cpuCount, 1);
+  assert.equal(status.limits.maxTimeoutMs, 240000);
 });

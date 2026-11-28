@@ -261,7 +261,7 @@ export function getRenderSandboxAdapterStatus() {
     name: 'BAYE Render Sandbox Adapter',
     milestone: 'G82',
     provider: 'Render Sandboxes',
-    sdkVersion: '1.5.0',
+    sdkVersion: '1.11.0',
     mode: 'pinned snapshot; disposable microVM per validation',
     plan: PLAN,
     memoryLimitMb: 2048,

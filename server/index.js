@@ -57,7 +57,11 @@ app.get('/', (_req,res)=>res.type('text').send('BAYE AI CORE — Gateway online.
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo(),independentCore:getIndependentCoreStatus()}));
 app.get('/api/training-readiness/status', (_req,res)=>res.json(getTrainingReadinessStatus()));
 app.get('/api/training-experiments/config/status', (_req,res)=>res.json(getTrainingExperimentConfigStatus()));
+import { inspectComputeResources, planComputeDispatch, getComputeWorkerStatus } from './ai/compute-worker-planner.js';
 app.get('/api/training-engine/status', (_req,res)=>res.json(getTrainingEngineStatus()));
+app.get('/api/compute-worker/status',(_req,res)=>res.json(getComputeWorkerStatus()));
+app.post('/api/compute-worker/resources/inspect',generationLimiter,(req,res)=>{const result=inspectComputeResources(req.body);if(result.status==='rejected')return res.status(400).json(result);res.json(result);});
+app.post('/api/compute-worker/dispatch/plan',generationLimiter,(req,res)=>{const result=planComputeDispatch(req.body);if(result.status==='rejected')return res.status(400).json(result);res.json(result);});
 app.use('/api/training-engine/storage', (req,res,next)=>{const token=process.env.BAYE_TRAINING_STORAGE_TOKEN;if(typeof token!=='string'||token.length<32)return res.status(503).json({error:'Training storage access token is not securely configured.'});if(!secureBearerMatch(req,token))return res.status(401).json({error:'Unauthorized'});next();});\napp.get('/api/training-engine/storage/status', async(_req,res)=>res.json(await getTrainingRunStorageStatus()));
 app.post('/api/training-engine/storage/runs', generationLimiter, async(req,res)=>{try{if(!trainingRunStorageReady())return res.status(503).json({error:'Persistent storage not configured.'});const result=await saveTrainingRunRecord(req.body);res.status(201).json(result);}catch(e){res.status(400).json({error:'Persistent run record rejected or unavailable.'});}});
 app.get('/api/training-engine/storage/runs', generationLimiter, async(req,res)=>{try{if(!trainingRunStorageReady())return res.status(503).json({error:'Persistent storage not configured.'});res.json({items:await listStoredTrainingRuns(Number(req.query.limit)||50)});}catch(_){res.status(503).json({error:'Persistent storage unavailable.'});}});

@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {inspectComputeResources,planComputeDispatch,getComputeWorkerStatus} from '../server/ai/compute-worker-planner.js';
+const resources=[{id:'host-a',kind:'cpu',mode:'owned-hardware',capacity:12,declaredAvailable:true},{id:'gpu-b',kind:'gpu',mode:'self-hosted',capacity:8,declaredAvailable:true},{id:'gpu-c',kind:'gpu',mode:'local',capacity:32,declaredAvailable:false}];
+test('inspects bounded unique resource inventory',()=>{const r=inspectComputeResources({resources});assert.equal(r.status,'inspected');assert.equal(r.availableCount,2);assert.equal(r.dispatchEnabled,false);});
+test('rejects malformed and oversized inventories',()=>{assert.equal(inspectComputeResources({resources:[{id:'x'}]}).status,'rejected');assert.equal(inspectComputeResources({resources:Array(51).fill(resources[0])}).status,'rejected');});
+test('plans smallest matching declared resource within budget',()=>{const p=planComputeDispatch({resources,requiredKind:'gpu',requiredCapacity:4,maxResourceUnits:10});assert.equal(p.status,'planned');assert.equal(p.plan.resourceId,'gpu-b');assert.equal(p.executionEnabled,false);});
+test('does not plan unavailable or over-budget resource',()=>{assert.equal(planComputeDispatch({resources,requiredKind:'gpu',requiredCapacity:4,maxResourceUnits:4}).status,'unavailable');});
+test('rejects invalid budgets and kinds',()=>{assert.equal(planComputeDispatch({resources,requiredKind:'x',requiredCapacity:4,maxResourceUnits:5}).status,'rejected');assert.equal(planComputeDispatch({resources,requiredKind:'gpu',requiredCapacity:4,maxResourceUnits:0}).status,'rejected');});
+test('status confirms no execution or provisioning',()=>{const s=getComputeWorkerStatus();assert.equal(s.workerDispatchEnabled,false);assert.equal(s.provisioningEnabled,false);assert.equal(s.trainingStarted,false);});

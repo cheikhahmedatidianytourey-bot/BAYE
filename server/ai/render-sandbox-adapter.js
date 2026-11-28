@@ -18,7 +18,7 @@ import { spawnSync } from 'node:child_process';
 
 const root = '/workspace/BAYE';
 function fail(message) {
-  process.stderr.write('BAYE snapshot preflight failed: ' + message + '\\n');
+  process.stderr.write('BAYE snapshot preflight failed: ' + message + '\n');
   process.exit(1);
 }
 if (!fs.existsSync(root) || fs.realpathSync(root) !== root) fail('expected project root is missing or redirected');
@@ -29,7 +29,7 @@ if (gitStatus.status !== 0 || gitStatus.stdout.trim()) fail('snapshot checkout m
 const nodeMajor = Number(process.versions.node.split('.')[0]);
 if (nodeMajor !== 24) fail('Node.js 24 is required');
 const npm = spawnSync('npm', ['--version'], { cwd: root, encoding: 'utf8', timeout: 5000 });
-if (npm.status !== 0 || !/^\\d+\\.\\d+\\.\\d+/.test((npm.stdout || '').trim())) fail('npm is unavailable');
+if (npm.status !== 0 || !/^\d+\.\d+\.\d+/.test((npm.stdout || '').trim())) fail('npm is unavailable');
 const packagePath = path.join(root, 'package.json');
 if (!fs.existsSync(packagePath)) fail('package.json is missing');
 const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
@@ -45,14 +45,14 @@ function inspect(directory, relative = '') {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     if (['.git', 'node_modules', 'dist', 'coverage'].includes(entry.name)) continue;
     const rel = relative ? relative + '/' + entry.name : entry.name;
-    if (/^\\.env(?:$|\\.)/i.test(entry.name) && !/^\\.env\\.(?:example|sample|template)$/i.test(entry.name)) forbidden.push(rel);
-    if (/^(?:id_rsa|id_ed25519|.*\\.(?:pem|key|p12|pfx))$/i.test(entry.name)) forbidden.push(rel);
+    if (/^\.env(?:$|\.)/i.test(entry.name) && !/^\.env\.(?:example|sample|template)$/i.test(entry.name)) forbidden.push(rel);
+    if (/^(?:id_rsa|id_ed25519|.*\.(?:pem|key|p12|pfx))$/i.test(entry.name)) forbidden.push(rel);
     if (entry.isDirectory()) inspect(path.join(directory, entry.name), rel);
   }
 }
 inspect(root);
 if (forbidden.length) fail('snapshot contains forbidden secret-like files: ' + forbidden.slice(0, 5).join(', '));
-process.stdout.write('BAYE snapshot preflight passed: clean checkout, Node 24, npm, dependencies and required scripts present; no secret-like files found\\n');
+process.stdout.write('BAYE snapshot preflight passed: clean checkout, Node 24, npm, dependencies and required scripts present; no secret-like files found\n');
 `;
 
 const APPLY_SCRIPT = String.raw`import fs from 'node:fs';

@@ -95,7 +95,7 @@ export async function runRepairSandbox(input, adapter) {
   const adapterError = validateAdapter(adapter);
   if (adapterError) return { status: 'rejected', error: adapterError };
 
-  const timeoutMs = input.timeoutMs === undefined ? 180000 : input.timeoutMs;
+  const timeoutMs = input.timeoutMs === undefined ? 210000 : input.timeoutMs;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > MAX_TIMEOUT_MS) {
     return { status: 'rejected', error: 'timeoutMs must be an integer from 100 to 240000' };
   }
@@ -167,7 +167,7 @@ export function getRepairSandboxStatus() {
     mode: 'trusted host adapter; Render Sandbox integration supplied by G82',
     limits: {
       maxTimeoutMs: MAX_TIMEOUT_MS,
-      defaultTimeoutMs: 180000,
+      defaultTimeoutMs: 210000,
       memoryLimitMb: 2048,
       cpuCount: 1,
       sandboxRuntimeSeconds: 300,

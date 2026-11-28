@@ -22,6 +22,17 @@ jobs:
         run: npm install
       - name: Verify pinned snapshot integrity manifest
         run: npm run verify:snapshot-integrity
+      - name: Record commit-linked integrity evidence
+        if: always()
+        run: node scripts/record-snapshot-integrity-evidence.mjs
+      - name: Archive integrity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: baye-snapshot-integrity-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/snapshot-integrity-evidence/
+          if-no-files-found: error
+          retention-days: 90
       - name: Run automated tests
         run: npm test
       - name: Build web application

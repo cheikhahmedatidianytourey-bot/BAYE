@@ -80,6 +80,9 @@ test('creates a deny-all disposable Render sandbox from the pinned snapshot and 
   assert.ok(preflightScript.includes("['hash-object', '--no-filters', '--', relative]"));
   assert.ok(preflightScript.includes("'server/ai/controlled-repair-gate.js'"));
   assert.ok(preflightScript.includes("'server/ai/repair-sandbox-runner.js'"));
+  assert.ok(preflightScript.includes("'scripts/verify-snapshot-integrity.mjs'"));
+  assert.ok(preflightScript.includes("'server/ai/snapshot-integrity-manifest.json'"));
+  assert.ok(preflightScript.includes('snapshot integrity manifest mismatch'));
   assert.ok(preflightScript.includes('critical snapshot file content differs from the pinned Git tree'));
   assert.equal(calls.uploads[0].path, '/tmp/baye-snapshot-preflight.mjs');
   assert.equal(calls.commands[0].command, 'timeout -k 2 10s node /tmp/baye-snapshot-preflight.mjs');
@@ -197,7 +200,7 @@ test('rejects unsafe patch targets before creating a sandbox', async () => {
 
 test('documents provider limits, credentials and currently supported checks', () => {
   const status = getRenderSandboxAdapterStatus();
-  assert.equal(status.milestone, 'G86');
+  assert.equal(status.milestone, 'G87');
   assert.equal(status.sdkVersion, '1.11.0');
   assert.equal(status.networkPolicy, 'deny-all');
   assert.equal(status.memoryLimitMb, 2048);

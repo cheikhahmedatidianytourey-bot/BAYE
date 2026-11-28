@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "start": "node server/index.js",
     "test": "node --test",
-    "test:security": "node --test server/ai/render-sandbox-security.test.js"
+    "test:security": "node --test server/ai/render-sandbox-security.test.js",
+    "verify:snapshot-integrity": "node scripts/verify-snapshot-integrity.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

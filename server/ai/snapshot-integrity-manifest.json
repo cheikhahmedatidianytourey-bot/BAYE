@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "algorithm": "sha256",
+  "files": [
+    {
+      "path": "package.json",
+      "sha256": "9fc0899809b1a53ffa74cb22e3cfe77220f46cd0f753b6356b6064f10c02ac50"
+    },
+    {
+      "path": "server/ai/render-sandbox-adapter.js",
+      "sha256": "04dd15eca597c5f7a2e2888cd49fb8b55ecd56448bcbd5e32742f393c4d058c7"
+    },
+    {
+      "path": "server/ai/controlled-repair-gate.js",
+      "sha256": "2134ac4dd3b6490543838923bb6dd8fcba5c52e5a1b266653f0f5c8fe7a776bb"
+    },
+    {
+      "path": "server/ai/repair-sandbox-runner.js",
+      "sha256": "b9543a2e161bcbffcbc74834f8d43d870decc89dfecd475314a052c7154ab53e"
+    },
+    {
+      "path": "scripts/verify-snapshot-integrity.mjs",
+      "sha256": "b71641164b64febca8f82ca838a83547f0a80f1c6221bf5f3c0b1e154c6b2555"
+    }
+  ]
+}

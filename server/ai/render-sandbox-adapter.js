@@ -200,14 +200,13 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
       let sandboxes;
 
       try {
+        if (signal?.aborted) throw new Error('sandbox execution aborted before creation');
         const config = readConfig(env);
         const changes = validateProposal(proposal);
         if (!Array.isArray(checks) || checks.length < 1 ||
             checks.some(check => !['unit-tests', 'application-build', 'security-tests'].includes(check))) {
           throw new Error('Render adapter supports only unit-tests, application-build and offline security-tests');
         }
-        if (signal?.aborted) throw new Error('sandbox execution aborted before creation');
-
         sandboxes = client || new Render().sandboxes;
         const sandbox = await sandboxes.create({
           sandboxGroupId: config.groupId,

@@ -83,12 +83,12 @@ test('does not create a sandbox for unsupported security checks', async () => {
   const adapter = createRenderSandboxAdapter({ client, env });
   const result = await adapter.run({
     proposal,
-    checks: ['security-tests'],
+    checks: ['arbitrary-shell-command'],
     limits,
     signal: new AbortController().signal
   });
   assert.equal(result.status, 'failed');
-  assert.match(result.error, /dedicated offline test command/);
+  assert.match(result.error, /unit-tests, application-build and offline security-tests/);
   assert.equal(calls.create.length, 0);
 });
 
@@ -135,13 +135,13 @@ test('rejects unsafe patch targets before creating a sandbox', async () => {
 
 test('documents provider limits, credentials and currently supported checks', () => {
   const status = getRenderSandboxAdapterStatus();
-  assert.equal(status.milestone, 'G82');
+  assert.equal(status.milestone, 'G83');
   assert.equal(status.sdkVersion, '1.11.0');
   assert.equal(status.networkPolicy, 'deny-all');
   assert.equal(status.memoryLimitMb, 2048);
   assert.equal(status.cpuCount, 1);
   assert.equal(status.apiKeyInjectedIntoSandbox, false);
-  assert.deepEqual(status.supportedChecks, ['unit-tests', 'application-build']);
+  assert.deepEqual(status.supportedChecks, ['unit-tests', 'application-build', 'security-tests']);
 });
 
 test('connects the Render adapter to G81 and keeps the human approval gates active', async () => {

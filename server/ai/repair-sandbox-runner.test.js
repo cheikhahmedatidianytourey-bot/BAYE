@@ -33,6 +33,12 @@ test('runs allow-listed checks through an explicitly injected isolated host adap
   assert.equal(result.execution.repositoryModified, false);
 });
 
+test('accepts the dedicated offline security validation check', async () => {
+  const result = await runRepairSandbox({ proposal, ...gates, checks: ['security-tests'] }, adapter);
+  assert.equal(result.status, 'passed');
+  assert.deepEqual(result.checks.map(item => item.id), ['security-tests']);
+});
+
 test('blocks execution unless all G80 approval gates are satisfied', async () => {
   const result = await runRepairSandbox({ proposal, checks: ['unit-tests'] }, adapter);
   assert.equal(result.status, 'blocked');
@@ -50,7 +56,7 @@ test('rejects arbitrary commands, duplicate checks and excessive timeout', async
   assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['node -e malicious'] }, adapter)).status, 'rejected');
   assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests', 'unit-tests'] }, adapter)).status, 'rejected');
   assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests'], timeoutMs: 300000 }, adapter)).status, 'rejected');
-  assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['security-tests'] }, adapter)).status, 'rejected');
+  assert.equal((await runRepairSandbox({ proposal, ...gates, checks: ['arbitrary-shell-command'] }, adapter)).status, 'rejected');
 });
 
 test('rejects incomplete, duplicate or malformed adapter evidence', async () => {

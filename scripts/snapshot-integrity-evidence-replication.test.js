@@ -17,7 +17,7 @@ function ledger(count) {
     entries.push(entry);
     previous = entry.recordHash;
   }
-  return Buffer.from(entries.map(entry => JSON.stringify(entry)).join('\\n') + '\\n');
+  return Buffer.from(entries.map(entry => JSON.stringify(entry)).join('\n') + '\n');
 }
 function directory() { return fs.mkdtempSync(path.join(os.tmpdir(), 'baye-evidence-replica-')); }
 

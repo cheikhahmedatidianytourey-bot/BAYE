@@ -93,10 +93,24 @@ export function createReplicationWatchdog(config, dependencies = {}) {
   async function runOnce() {
     if (active) return active;
     active = Promise.resolve().then(async () => {
-      const primaryLedger = readRegularFile(primaryLedgerFile, 'primary ledger');
-      const replicaLedger = readRegularFile(replicaLedgerFile, 'replica ledger');
       const timestamp = now();
-      const result = await monitor(primaryDirectory, replicaDirectory, primaryLedger, journalDirectory, { replicaLedgerBytes: replicaLedger, timestamp });
+      let result;
+      try {
+        const primaryLedger = readRegularFile(primaryLedgerFile, 'primary ledger');
+        const replicaLedger = readRegularFile(replicaLedgerFile, 'replica ledger');
+        result = await monitor(primaryDirectory, replicaDirectory, primaryLedger, journalDirectory, { replicaLedgerBytes: replicaLedger, timestamp });
+      } catch (error) {
+        // Persist watchdog-level failures even when G93 itself cannot produce a journal entry.
+        result = {
+          status: 'monitor_error', healthy: false,
+          findings: ['monitor_execution_failed: ' + (error?.message || String(error))],
+          error: error?.message || String(error),
+          journal: {
+            sequence: state.lastJournalSequence ?? 0,
+            entryHash: state.lastJournalHash ?? null
+          }
+        };
+      }
       state = saveState(stateFile, state, result, timestamp);
       lastResult = { ...result, watchState: state };
       return lastResult;

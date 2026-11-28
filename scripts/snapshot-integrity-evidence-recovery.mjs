@@ -101,7 +101,7 @@ function readHistory(directory, ledgerBytes) {
     if (!checked.valid) throw new Error('historical checkpoint ' + sequence + ' rejected: ' + checked.error);
     if (sequence > 1 && checkpoint.recordCount <= priorCheckpoint.recordCount) throw new Error('checkpoint history does not advance monotonically');
     if (sequence === 1 && checkpoint.recordCount < 1) throw new Error('first checkpoint is empty');
-    const expectedPrevious = priorCheckpoint ? priorCheckpoint.checkpointHash : null;
+    const expectedPrevious = previousManifestHash;
     const expectedManifest = makeManifest(sequence, checkpoint, expectedPrevious);
     if (sequence === latest.sequence) {
       if (latest.checkpointFile !== name || latest.checkpointHash !== checkpoint.checkpointHash ||
@@ -152,4 +152,23 @@ export function recoverDurableEvidenceStore(directory, ledgerBytes) {
   const result = verifyDurableEvidenceStore(directory, ledgerBytes);
   if (!result.valid) throw new Error('evidence recovery failed: ' + result.error);
   return result;
+}
+
+function cli() {
+  const [ledgerPath, directory, mode, rootAnchor] = process.argv.slice(2);
+  if (!ledgerPath || !directory || !['--persist', '--recover'].includes(mode)) {
+    throw new Error('usage: node scripts/snapshot-integrity-evidence-recovery.mjs <ledger.jsonl> <store-directory> --persist|--recover [root-anchor]');
+  }
+  const bytes = fs.readFileSync(path.resolve(ledgerPath));
+  if (mode === '--recover') {
+    const result = recoverDurableEvidenceStore(directory, bytes);
+    process.stdout.write('BAYE evidence recovery verified: ' + result.checkpointCount + ' checkpoint(s), ' + result.recordCount + ' record(s).\\n');
+    return;
+  }
+  const result = persistDurableCheckpoint(directory, bytes, rootAnchor ? { rootAnchor } : {});
+  process.stdout.write('BAYE durable evidence checkpoint ' + (result.unchanged ? 'already current' : 'persisted') + ': sequence=' + result.sequence + ', records=' + result.checkpoint.recordCount + '.\\n');
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+  try { cli(); }
+  catch (error) { process.stderr.write('BAYE evidence recovery failed: ' + (error?.message || error) + '\\n'); process.exitCode = 1; }
 }

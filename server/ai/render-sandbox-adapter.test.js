@@ -10,6 +10,9 @@ const env = {
 };
 const proposal = {
   id: 'repair-test',
+  incidentId: 'incident-test',
+  diagnosisCode: 'test-failure',
+  reason: 'Apply a bounded test repair after evidence review.',
   changes: [{
     path: 'server/ai/retry.js',
     operation: 'modify',

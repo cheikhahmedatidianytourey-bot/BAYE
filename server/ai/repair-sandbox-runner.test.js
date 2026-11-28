@@ -69,10 +69,17 @@ test('reports failures and bounds returned summaries', async () => {
 
 test('signals timeout to the host adapter and returns bounded failure', async () => {
   let receivedSignal;
-  const slow = { ...adapter, async run({ signal }) {
-    receivedSignal = signal;
-    return new Promise(resolve => signal.addEventListener('abort', () => resolve({ status: 'failed', checks: [{ id: 'unit-tests', status: 'error' }] }, { once: true }));
-  } };
+  const slow = {
+    ...adapter,
+    async run({ signal }) {
+      receivedSignal = signal;
+      return new Promise(resolve => {
+        signal.addEventListener('abort', () => {
+          resolve({ status: 'failed', checks: [{ id: 'unit-tests', status: 'error' }] });
+        }, { once: true });
+      });
+    }
+  };
   const result = await runRepairSandbox({ proposal, ...gates, checks: ['unit-tests'], timeoutMs: 100 }, slow);
   assert.equal(result.status, 'failed');
   assert.equal(result.error, 'sandbox execution timed out');

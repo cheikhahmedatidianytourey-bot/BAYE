@@ -135,13 +135,13 @@ test('rejects unsafe patch targets before creating a sandbox', async () => {
 
 test('documents provider limits, credentials and currently supported checks', () => {
   const status = getRenderSandboxAdapterStatus();
-  assert.equal(status.milestone, 'G82');
+  assert.equal(status.milestone, 'G83');
   assert.equal(status.sdkVersion, '1.11.0');
   assert.equal(status.networkPolicy, 'deny-all');
   assert.equal(status.memoryLimitMb, 2048);
   assert.equal(status.cpuCount, 1);
   assert.equal(status.apiKeyInjectedIntoSandbox, false);
-  assert.deepEqual(status.supportedChecks, ['unit-tests', 'application-build']);
+  assert.deepEqual(status.supportedChecks, ['unit-tests', 'application-build', 'security-tests']);
 });
 
 test('connects the Render adapter to G81 and keeps the human approval gates active', async () => {

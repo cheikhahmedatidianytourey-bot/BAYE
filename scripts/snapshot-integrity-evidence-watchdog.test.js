@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createReplicationWatchdog } from './snapshot-integrity-evidence-watchdog.mjs';
+import { createChainEntry, ZERO_HASH } from './snapshot-integrity-evidence-chain.mjs';
+import { persistDurableCheckpoint } from './snapshot-integrity-evidence-recovery.mjs';
+import { replicateDurableEvidenceStore } from './snapshot-integrity-evidence-replication.mjs';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'baye-g94-watchdog-'));
@@ -94,5 +97,47 @@ test('does not overwrite a malformed persisted watch state', async () => {
     const stateFile = path.join(f.dirs.journal, 'replication-watch-state.json');
     fs.writeFileSync(stateFile, '{"schemaVersion":1,"status":"bad"}');
     assert.throws(() => createReplicationWatchdog({ ...f.config, stateFile }), /malformed/);
+  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('persists watchdog execution exceptions as monitor_error incidents and counters', async () => {
+  const f = fixture();
+  try {
+    const stateFile = path.join(f.dirs.journal, 'watch-state.json');
+    const failingMonitor = async () => { throw new Error('simulated G93 journal lock failure'); };
+    const first = createReplicationWatchdog({ ...f.config, stateFile }, { monitor: failingMonitor, now: () => '2026-11-28T14:00:00.000Z' });
+    const a = await first.start();
+    assert.equal(a.lastResult.status, 'monitor_error');
+    assert.equal(a.state.status, 'monitor_error');
+    assert.equal(a.state.consecutiveFailures, 1);
+    assert.equal(a.state.totalCycles, 1);
+    assert.match(a.lastResult.error, /journal lock failure/);
+    await first.stop();
+
+    const second = createReplicationWatchdog({ ...f.config, stateFile }, { monitor: failingMonitor, now: () => '2026-11-28T14:05:00.000Z' });
+    const b = await second.start();
+    assert.equal(b.state.consecutiveFailures, 2);
+    assert.equal(b.state.totalCycles, 2);
+    assert.equal(b.state.status, 'monitor_error');
+    await second.stop();
+  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('integrates watchdog with the real G93 health monitor and evidence replication', async () => {
+  const f = fixture();
+  try {
+    const bytes = Buffer.from([
+      JSON.stringify(createChainEntry(Buffer.from('real G93 integration'), { commit: { sha: 'a'.repeat(40) } }, ZERO_HASH, 1, 'evidence-1.json'))
+    ].join('') + '\n');
+    fs.writeFileSync(f.primaryLedgerFile, bytes);
+    fs.writeFileSync(f.replicaLedgerFile, bytes);
+    persistDurableCheckpoint(f.dirs.primary, bytes);
+    replicateDurableEvidenceStore(f.dirs.primary, f.dirs.replica, bytes);
+    const watchdog = createReplicationWatchdog(f.config, { now: () => '2026-11-28T14:10:00.000Z' });
+    const result = await watchdog.start();
+    assert.equal(result.lastResult.status, 'healthy');
+    assert.equal(result.state.totalCycles, 1);
+    assert.equal(result.state.consecutiveFailures, 0);
+    await watchdog.stop();
   } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 });

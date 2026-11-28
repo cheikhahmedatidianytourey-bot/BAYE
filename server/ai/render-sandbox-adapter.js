@@ -1,6 +1,7 @@
 // G82: Render Sandboxes adapter. It only runs against a pre-provisioned, pinned snapshot.
 import { Render } from '@renderinc/sdk';
 import { validateRepairProposal } from './controlled-repair-gate.js';
+import { runRepairSandbox } from './repair-sandbox-runner.js';
 
 const MAX_FILES = 8;
 const MAX_PATCH_BYTES = 12_000;
@@ -279,4 +280,8 @@ export function getRenderSandboxAdapterStatus() {
     snapshotModified: false,
     createsResourcesOnlyWhenRunIsCalled: true
   };
+}
+
+export async function runRepairSandboxOnRender(input, adapterOptions = {}) {
+  return runRepairSandbox(input, createRenderSandboxAdapter(adapterOptions));
 }

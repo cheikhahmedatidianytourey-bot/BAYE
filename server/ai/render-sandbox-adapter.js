@@ -1,5 +1,6 @@
 // G82: Render Sandboxes adapter. It only runs against a pre-provisioned, pinned snapshot.
 import { Render } from '@renderinc/sdk';
+import { validateRepairProposal } from './controlled-repair-gate.js';
 
 const MAX_FILES = 8;
 const MAX_PATCH_BYTES = 12_000;
@@ -76,7 +77,9 @@ function readConfig(env) {
 }
 
 function validateProposal(proposal) {
-  if (!proposal || !Array.isArray(proposal.changes) || proposal.changes.length < 1 || proposal.changes.length > MAX_FILES) {
+  const gate = validateRepairProposal(proposal);
+  if (gate.status !== 'validated') throw new Error('repair proposal rejected: ' + gate.errors.join('; '));
+  if (!Array.isArray(proposal.changes) || proposal.changes.length < 1 || proposal.changes.length > MAX_FILES) {
     throw new Error('repair proposal must contain 1–8 file changes');
   }
   return proposal.changes.map(change => {

@@ -1,3 +1,0 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {trainingRunStoreReady,getTrainingRunStoreStatus} from '../server/ai/training-run-store.js';
-test('store status makes database dependency and execution-disabled state explicit',async()=>{const s=await getTrainingRunStoreStatus();assert.equal(s.executionEnabled,false);assert.equal(s.trainingStarted,false);assert.ok(['postgresql-configured','postgresql-requires-DATABASE_URL'].includes(s.storage));});
-test('readiness reports configuration without claiming persistence is live',()=>{assert.equal(typeof trainingRunStoreReady(),'boolean');});

@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {trainOwnedTextPrototype,getOwnedTextPrototypeStatus} from './owned-text-prototype-trainer.js';
+const train=[{text:'team wins game football',label:'sports'},{text:'player scores goal',label:'sports'},{text:'election government vote',label:'politics'},{text:'minister parliament policy',label:'politics'}];
+const testSet=[{text:'football player goal',label:'sports'},{text:'government election vote',label:'politics'}];
+test('prototype trains and reports held-out predictions',()=>{const r=trainOwnedTextPrototype({train,test:testSet});assert.equal(r.status,'trained');assert.equal(r.metrics.accuracy,1);assert.equal(r.vocabularySize>0,true);});
+test('rejects missing or malformed splits',()=>{assert.equal(trainOwnedTextPrototype({train,test:[]}).status,'rejected');assert.equal(trainOwnedTextPrototype({train:[{text:'x',label:'a'}],test:testSet}).status,'rejected');});
+test('rejects unknown test label',()=>{assert.equal(trainOwnedTextPrototype({train,test:[{text:'x',label:'other'}]}).status,'rejected');});
+test('bounded sample text',()=>{assert.equal(trainOwnedTextPrototype({train:[{text:'x'.repeat(2001),label:'a'},...train.slice(1)],test:testSet}).status,'rejected');});
+test('status accurately describes prototype scope',()=>{const s=getOwnedTextPrototypeStatus();assert.equal(s.trainingEnabled,true);assert.equal(s.persistence,false);assert.match(s.scope,/not a language model/);});

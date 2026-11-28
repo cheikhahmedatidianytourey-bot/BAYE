@@ -30,6 +30,7 @@ import { inspectDatasetBatch, getDataQualityPipelineStatus } from './ai/data-qua
 import { inspectControlledDatasetIntake, getControlledIntakeStatus } from './ai/controlled-dataset-intake.js';
 import { assessTrainingReadiness, getTrainingReadinessStatus } from './ai/training-readiness.js';
 import { configureTrainingExperiment, getTrainingExperimentConfigStatus } from './ai/training-experiment-config.js';
+import { createTrainingRun, transitionTrainingRun, getTrainingRun, listTrainingRuns, getTrainingEngineStatus } from './ai/training-engine.js';
 import { registryReady, initializeDatasetRegistry, registerDatasetEntry, registryEntryFromIntake, listDatasetEntries, getDatasetVersionHistory, inspectRegistryIntegrity, getDatasetRegistryStatus } from './ai/dataset-registry.js';
 
 const app = express();
@@ -55,6 +56,11 @@ app.get('/', (_req,res)=>res.type('text').send('BAYE AI CORE — Gateway online.
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo(),independentCore:getIndependentCoreStatus()}));
 app.get('/api/training-readiness/status', (_req,res)=>res.json(getTrainingReadinessStatus()));
 app.get('/api/training-experiments/config/status', (_req,res)=>res.json(getTrainingExperimentConfigStatus()));
+app.get('/api/training-engine/status', (_req,res)=>res.json(getTrainingEngineStatus()));
+app.post('/api/training-engine/runs', generationLimiter, (req,res)=>{const result=createTrainingRun(req.body);if(result.status==='rejected')return res.status(400).json(result);if(result.status==='capacity')return res.status(503).json(result);res.status(201).json(result);});
+app.get('/api/training-engine/runs', generationLimiter, (req,res)=>res.json({items:listTrainingRuns(Number(req.query.limit)||50)}));
+app.get('/api/training-engine/runs/:id', generationLimiter, (req,res)=>{const run=getTrainingRun(req.params.id);if(!run)return res.status(404).json({error:'Run not found.'});res.json({run});});
+app.post('/api/training-engine/runs/:id/stage', generationLimiter, (req,res)=>{const result=transitionTrainingRun({...req.body,id:req.params.id});if(result.status==='not-found')return res.status(404).json(result);if(result.status==='rejected')return res.status(400).json(result);if(result.status==='blocked')return res.status(422).json(result);res.json(result);});
 app.post('/api/training-experiments/configure', generationLimiter, (req,res)=>{const result=configureTrainingExperiment(req.body);if(result.status==='rejected')return res.status(400).json(result);if(result.status==='needs-review')return res.status(422).json(result);res.status(200).json(result);});
 app.post('/api/training-readiness/assess', generationLimiter, (req,res)=>{const result=assessTrainingReadiness(req.body);if(result.status==='rejected')return res.status(400).json(result);res.json(result);});
 app.get('/api/owned-models/status', (_req,res)=>res.json(getOwnedModelDevelopmentStatus()));

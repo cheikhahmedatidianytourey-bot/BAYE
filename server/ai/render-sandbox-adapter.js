@@ -36,7 +36,9 @@ const criticalFiles = [
   'package.json',
   'server/ai/render-sandbox-adapter.js',
   'server/ai/controlled-repair-gate.js',
-  'server/ai/repair-sandbox-runner.js'
+  'server/ai/repair-sandbox-runner.js',
+  'scripts/verify-snapshot-integrity.mjs',
+  'server/ai/snapshot-integrity-manifest.json'
 ];
 const fingerprints = [];
 for (const relative of criticalFiles) {
@@ -50,6 +52,28 @@ for (const relative of criticalFiles) {
   if (actual.status !== 0 || actual.stdout.trim() !== committed.stdout.trim()) fail('critical snapshot file content differs from the pinned Git tree: ' + relative);
   const digest = createHash('sha256').update(fs.readFileSync(absolute)).digest('hex');
   fingerprints.push(relative + '=' + digest);
+}
+const manifestPath = path.join(root, 'server/ai/snapshot-integrity-manifest.json');
+let integrityManifest;
+try { integrityManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); }
+catch { fail('versioned snapshot integrity manifest is missing or invalid JSON'); }
+if (integrityManifest.schemaVersion !== 1 || integrityManifest.algorithm !== 'sha256' ||
+    !Array.isArray(integrityManifest.files)) fail('unsupported snapshot integrity manifest schema');
+const expectedManifestFiles = [
+  'package.json',
+  'server/ai/render-sandbox-adapter.js',
+  'server/ai/controlled-repair-gate.js',
+  'server/ai/repair-sandbox-runner.js',
+  'scripts/verify-snapshot-integrity.mjs'
+];
+const manifestPaths = integrityManifest.files.map(item => item?.path);
+if (manifestPaths.length !== expectedManifestFiles.length ||
+    expectedManifestFiles.some(file => !manifestPaths.includes(file)) ||
+    new Set(manifestPaths).size !== manifestPaths.length) fail('snapshot integrity manifest file set is incomplete or unexpected');
+for (const item of integrityManifest.files) {
+  if (!/^[a-f0-9]{64}$/.test(item.sha256 || '')) fail('invalid SHA-256 in snapshot integrity manifest: ' + item.path);
+  const actual = createHash('sha256').update(fs.readFileSync(path.join(root, item.path))).digest('hex');
+  if (actual !== item.sha256) fail('snapshot integrity manifest mismatch: ' + item.path);
 }
 const nodeMajor = Number(process.versions.node.split('.')[0]);
 if (nodeMajor !== 24) fail('Node.js 24 is required');
@@ -353,7 +377,7 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
 export function getRenderSandboxAdapterStatus() {
   return {
     name: 'BAYE Render Sandbox Adapter',
-    milestone: 'G86',
+    milestone: 'G87',
     provider: 'Render Sandboxes',
     sdkVersion: '1.11.0',
     mode: 'pinned snapshot; disposable microVM per validation',

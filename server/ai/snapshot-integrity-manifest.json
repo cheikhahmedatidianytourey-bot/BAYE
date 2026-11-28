@@ -4,7 +4,7 @@
   "files": [
     {
       "path": "package.json",
-      "sha256": "9fc0899809b1a53ffa74cb22e3cfe77220f46cd0f753b6356b6064f10c02ac50"
+      "sha256": "c5dc941cef8b678966572c496233428b22058de9c258d1f5e951abddf42b33a7"
     },
     {
       "path": "server/ai/render-sandbox-adapter.js",

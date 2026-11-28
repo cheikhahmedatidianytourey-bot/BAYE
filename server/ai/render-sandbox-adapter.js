@@ -149,8 +149,8 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
         const config = readConfig(env);
         const changes = validateProposal(proposal);
         if (!Array.isArray(checks) || checks.length < 1 ||
-            checks.some(check => !['unit-tests', 'application-build'].includes(check))) {
-          throw new Error('Render adapter supports only unit-tests and application-build; security-tests needs a dedicated offline test command');
+            checks.some(check => !['unit-tests', 'application-build', 'security-tests'].includes(check))) {
+          throw new Error('Render adapter supports only unit-tests, application-build and offline security-tests');
         }
         if (signal?.aborted) throw new Error('sandbox execution aborted before creation');
 
@@ -268,7 +268,7 @@ export function getRenderSandboxAdapterStatus() {
     cpuCount: 1,
     sandboxLifetimeSeconds: SANDBOX_LIFETIME_SECONDS,
     networkPolicy: 'deny-all',
-    supportedChecks: ['unit-tests', 'application-build'],
+    supportedChecks: ['unit-tests', 'application-build', 'security-tests'],
     requires: [
       'RENDER_API_KEY',
       'RENDER_WORKSPACE_ID',

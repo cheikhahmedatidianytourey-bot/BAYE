@@ -111,8 +111,10 @@ export function monitorEvidenceReplication(primaryDirectory, replicaDirectory, l
   const journalRoot = path.resolve(journalDirectory);
   fs.mkdirSync(journalRoot, { recursive: true, mode: 0o700 });
   const journal = safeDirectory(journalRoot);
+  const replicaLedgerBytes = options.replicaLedgerBytes ?? ledgerBytes;
+  if (!Buffer.isBuffer(replicaLedgerBytes)) throw new TypeError('replicaLedgerBytes must be a Buffer');
   const primary = inspectStore(primaryDirectory, ledgerBytes);
-  const replica = inspectStore(replicaDirectory, ledgerBytes);
+  const replica = inspectStore(replicaDirectory, replicaLedgerBytes);
   const findings = [];
   let status;
 

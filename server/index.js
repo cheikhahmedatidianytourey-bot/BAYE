@@ -21,6 +21,7 @@ import { readJsonLimited } from './ai/bounded-json.js';
 import { createVideoSubmitHandler, createVideoStatusHandler } from './ai/video-route-handlers.js';
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
+import { validateAppBuilderPrompt, parseGeneratedProject, buildAppBuilderInstruction } from './app-builder.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -159,6 +160,25 @@ async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0
     temperature
   });
 }
+// Functional MVP app builder: generates a bounded file manifest, but never executes it.
+app.post('/api/projects/generate', generationLimiter, enforceFreeQuota('text'), async (req,res)=>{
+  try{
+    const checked=validateAppBuilderPrompt(req.body?.prompt);
+    if(!checked.valid)return res.status(400).json({error:checked.reason,limit:checked.limit||null});
+    const key=process.env.AI_API_KEY;
+    if(!key)return res.status(503).json({error:'Le moteur IA n’est pas configuré.'});
+    const endpoint=(process.env.AI_API_BASE_URL||'https://api.openai.com/v1').replace(/\/$/,'')+'/chat/completions';
+    const model=process.env.AI_MODEL||'gpt-4o-mini';
+    const generated=await callAI({key,endpoint,model,messages:[
+      {role:'system',content:buildAppBuilderInstruction()},
+      {role:'user',content:checked.prompt}
+    ],max_tokens:7000,temperature:0.25});
+    const result=parseGeneratedProject(generated.piece);
+    if(!result.passed)return res.status(502).json({error:'Manifest d’application invalide. Réessaie avec une demande plus précise.',validation:result});
+    res.json({...result,model:generated.model||model,provider:generated.providerId||'primary'});
+  }catch(err){console.error('BAYE app builder error',err);res.status(502).json({error:'BAYE Builder n’a pas pu générer le projet.'});}
+});
+
 app.post('/api/generate', generationLimiter, enforceFreeQuota('text'), async (req,res)=>{
   try {
     const {prompt,kind='Texte'}=req.body||{};

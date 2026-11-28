@@ -5,6 +5,15 @@ import { verifyDurableEvidenceStore, recoverDurableEvidenceStore } from './snaps
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const checkpointName = sequence => 'checkpoint-' + String(sequence).padStart(8, '0') + '.json';
+const ledgerName = sequence => 'ledger-' + String(sequence).padStart(8, '0') + '.jsonl';
+
+function ledgerPrefix(ledgerBytes, recordCount) {
+  const text = ledgerBytes.toString('utf8');
+  const lines = text.split('\\n');
+  if (lines.at(-1) === '') lines.pop();
+  if (lines.length < recordCount) throw new Error('ledger does not contain the checkpoint prefix');
+  return Buffer.from(lines.slice(0, recordCount).join('\\n') + '\\n');
+}
 
 function checkedDirectory(directory, create = false) {
   const target = path.resolve(directory);

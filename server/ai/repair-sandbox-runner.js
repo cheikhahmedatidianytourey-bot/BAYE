@@ -4,7 +4,7 @@ import { evaluateRepairGate } from './controlled-repair-gate.js';
 const MAX_CHECKS = 2;
 const MAX_TIMEOUT_MS = 240000;
 const MAX_SUMMARY = 500;
-const ALLOWED_CHECKS = new Set(['unit-tests', 'application-build']);
+const ALLOWED_CHECKS = new Set(['unit-tests', 'application-build', 'security-tests']);
 const REQUIRED_CAPABILITIES = {
   isolatedExecution: true,
   disposableWorkspace: true,

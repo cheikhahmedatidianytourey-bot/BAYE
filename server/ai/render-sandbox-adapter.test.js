@@ -6,7 +6,8 @@ const env = {
   RENDER_API_KEY: 'test-only-api-key',
   RENDER_WORKSPACE_ID: 'tea-test123',
   RENDER_SANDBOX_GROUP_ID: 'sbg-test',
-  RENDER_SANDBOX_SNAPSHOT_ID: 'snp-test'
+  RENDER_SANDBOX_SNAPSHOT_ID: 'snp-test',
+  RENDER_SANDBOX_EXPECTED_COMMIT: '85efb9c67caa4e3674702ce4ece219a43fd9ce44'
 };
 const proposal = {
   id: 'repair-test',
@@ -72,6 +73,8 @@ test('creates a deny-all disposable Render sandbox from the pinned snapshot and 
   });
   assert.equal(Object.hasOwn(calls.create[0], 'env'), false);
   assert.equal(calls.uploads.length, 3);
+  assert.ok(calls.uploads[0].data.toString('utf8').includes(env.RENDER_SANDBOX_EXPECTED_COMMIT));
+  assert.ok(calls.uploads[0].data.toString('utf8').includes("['rev-parse', 'HEAD']"));
   assert.equal(calls.uploads[0].path, '/tmp/baye-snapshot-preflight.mjs');
   assert.equal(calls.commands[0].command, 'timeout -k 2 10s node /tmp/baye-snapshot-preflight.mjs');
   assert.ok(calls.commands.findIndex(item => item.command.includes('baye-snapshot-preflight')) < calls.commands.findIndex(item => item.command.includes('baye-apply-repair')));
@@ -121,6 +124,18 @@ test('rejects missing Render configuration before creating resources', async () 
   assert.equal(calls.create.length, 0);
 });
 
+test('rejects malformed expected snapshot commit before creating resources', async () => {
+  const { client, calls } = fakeClient();
+  const adapter = createRenderSandboxAdapter({
+    client,
+    env: { ...env, RENDER_SANDBOX_EXPECTED_COMMIT: 'main' }
+  });
+  const result = await adapter.run({ proposal, checks: ['unit-tests'], limits });
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /full 40-character Git commit SHA/);
+  assert.equal(calls.create.length, 0);
+});
+
 test('always attempts termination after a patch-application failure', async () => {
   const { client, calls } = fakeClient({ exitCodes: { 'node /tmp/baye-apply-repair.mjs': 1 } });
   const adapter = createRenderSandboxAdapter({ client, env });
@@ -155,7 +170,7 @@ test('rejects unsafe patch targets before creating a sandbox', async () => {
 
 test('documents provider limits, credentials and currently supported checks', () => {
   const status = getRenderSandboxAdapterStatus();
-  assert.equal(status.milestone, 'G84');
+  assert.equal(status.milestone, 'G85');
   assert.equal(status.sdkVersion, '1.11.0');
   assert.equal(status.networkPolicy, 'deny-all');
   assert.equal(status.memoryLimitMb, 2048);

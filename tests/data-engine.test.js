@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {validateDatasetRecord,getDataEngineStatus} from '../server/ai/data-engine.js';
+const valid={name:'Curated sample',description:'A test dataset metadata record',source:'Local synthetic data',license:'CC0',modality:'text',recordCount:100,personalData:false,splits:[{name:'train',ratio:.8},{name:'validation',ratio:.1},{name:'test',ratio:.1}]};
+test('accepts valid bounded metadata without ingestion',()=>{const r=validateDatasetRecord(valid);assert.equal(r.valid,true);assert.equal(r.manifest.ingestionEnabled,false);assert.equal(r.manifest.trainingEnabled,false);});
+test('rejects malformed metadata and unsupported modality',()=>{assert.equal(validateDatasetRecord(null).valid,false);assert.equal(validateDatasetRecord({...valid,modality:'unknown'}).valid,false);});
+test('rejects invalid split definitions and ratios',()=>{assert.equal(validateDatasetRecord({...valid,splits:[{name:'train',ratio:.9},{name:'validation',ratio:.1},{name:'test',ratio:.1}]}).valid,false);assert.equal(validateDatasetRecord({...valid,splits:[{name:'train',ratio:.8},{name:'train',ratio:.1},{name:'test',ratio:.1}]}).valid,false);});
+test('rejects bad counts and personal data flags',()=>{assert.equal(validateDatasetRecord({...valid,recordCount:-1}).valid,false);assert.equal(validateDatasetRecord({...valid,personalData:'no'}).valid,false);});
+test('status states the scope truthfully',()=>{const s=getDataEngineStatus();assert.equal(s.ingestion,'not-implemented');assert.equal(s.executionEnabled,false);});

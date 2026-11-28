@@ -1,0 +1,9 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateFailureEvidence,diagnoseFailures,getFailureDiagnosisStatus} from './failure-diagnosis.js';
+test('identifies a likely timeout cause with traceable evidence',()=>{const r=diagnoseFailures([{id:'e1',errorCode:'timeout',stage:'training'}]);assert.equal(r.status,'diagnosed');assert.equal(r.primaryHypothesis.category,'timeout');assert.deepEqual(r.primaryHypothesis.evidenceIds,['e1']);});
+test('ranks repeated evidence and groups matching causes',()=>{const r=diagnoseFailures([{id:'a',errorCode:'connection-failed'},{id:'b',errorCode:'connection-failed'},{id:'c',errorCode:'invalid-input'}]);assert.equal(r.primaryHypothesis.code,'connection-failed');assert.equal(r.primaryHypothesis.occurrences,2);});
+test('keeps unknown failures explicitly uncertain',()=>{const r=diagnoseFailures([{id:'x',errorCode:'unrecognized-code',message:'unknown'}]);assert.equal(r.primaryHypothesis.category,'unclassified');assert.equal(r.primaryHypothesis.confidenceLabel,'low');});
+test('rejects malformed, duplicate and oversized evidence',()=>{assert.equal(validateFailureEvidence([]).status,'rejected');assert.equal(validateFailureEvidence([{id:'x'},{id:'x'}]).status,'rejected');assert.equal(validateFailureEvidence(Array.from({length:101},(_,i)=>({id:String(i)}))).status,'rejected');});
+test('rejects invalid fields and bounded attempts',()=>{assert.equal(validateFailureEvidence([{id:'x',errorCode:42}]).status,'rejected');assert.equal(validateFailureEvidence([{id:'x',attempts:10001}]).status,'rejected');});
+test('bounds text samples and reports non-executing safety posture',()=>{const r=diagnoseFailures([{id:'x',errorCode:'timeout',message:'a'.repeat(2000)}]);assert.ok(r.primaryHypothesis.messageSamples[0].length<=240);const s=getFailureDiagnosisStatus();assert.equal(s.executesRepairs,false);assert.equal(s.networkAccess,false);assert.equal(s.repositoryAccess,false);});

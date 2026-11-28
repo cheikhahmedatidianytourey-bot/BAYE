@@ -24,6 +24,7 @@ import { buildStudioInstruction } from './studio-engine.js';
 import { validateAppBuilderPrompt, parseGeneratedProject, buildAppBuilderInstruction } from './app-builder.js';
 import { inspectBuildTestRequest } from './project-build-test-api.js';
 import { getOwnedModelDevelopmentStatus, inspectOwnedModelTrainingRequest } from './ai/owned-model-development-api.js';
+import { trainOwnedTextPrototype, getOwnedTextPrototypeStatus } from './ai/owned-text-prototype-trainer.js';
 import { inspectTextForVerification, getVerificationEngineStatus } from './ai/verification-engine.js';
 import { validateDatasetRecord, getDataEngineStatus } from './ai/data-engine.js';
 import { inspectDatasetBatch, getDataQualityPipelineStatus } from './ai/data-quality-pipeline.js';
@@ -109,6 +110,8 @@ app.post('/api/training-engine/runs/:id/stage', generationLimiter, (req,res)=>{c
 app.post('/api/training-experiments/configure', generationLimiter, (req,res)=>{const result=configureTrainingExperiment(req.body);if(result.status==='rejected')return res.status(400).json(result);if(result.status==='needs-review')return res.status(422).json(result);res.status(200).json(result);});
 app.post('/api/training-readiness/assess', generationLimiter, (req,res)=>{const result=assessTrainingReadiness(req.body);if(result.status==='rejected')return res.status(400).json(result);res.json(result);});
 app.get('/api/owned-models/status', (_req,res)=>res.json(getOwnedModelDevelopmentStatus()));
+app.get('/api/owned-models/text-prototype/status', (_req,res)=>res.json(getOwnedTextPrototypeStatus()));
+app.post('/api/owned-models/text-prototype/train', generationLimiter, (req,res)=>{const result=trainOwnedTextPrototype(req.body);res.status(result.status==='rejected'?400:200).json(result);});
 app.get('/api/verification/status', (_req,res)=>res.json(getVerificationEngineStatus()));
 app.get('/api/data-engine/status', (_req,res)=>res.json({...getDataEngineStatus(),qualityPipeline:getDataQualityPipelineStatus(),controlledIntake:getControlledIntakeStatus(),datasetRegistry:getDatasetRegistryStatus()}));
 app.post('/api/data-engine/intake/preview', generationLimiter, (req,res)=>{const result=inspectControlledDatasetIntake(req.body);if(result.status==='rejected')return res.status(400).json(result);res.status(200).json(result);});

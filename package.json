@@ -10,7 +10,8 @@
     "start": "node server/index.js",
     "test": "node --test",
     "test:security": "node --test server/ai/render-sandbox-security.test.js",
-    "verify:snapshot-integrity": "node scripts/verify-snapshot-integrity.mjs"
+    "verify:snapshot-integrity": "node scripts/verify-snapshot-integrity.mjs",
+    "evidence:recover": "node scripts/snapshot-integrity-evidence-recovery.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

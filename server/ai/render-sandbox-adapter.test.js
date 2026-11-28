@@ -83,12 +83,12 @@ test('does not create a sandbox for unsupported security checks', async () => {
   const adapter = createRenderSandboxAdapter({ client, env });
   const result = await adapter.run({
     proposal,
-    checks: ['security-tests'],
+    checks: ['arbitrary-shell-command'],
     limits,
     signal: new AbortController().signal
   });
   assert.equal(result.status, 'failed');
-  assert.match(result.error, /dedicated offline test command/);
+  assert.match(result.error, /unit-tests, application-build and offline security-tests/);
   assert.equal(calls.create.length, 0);
 });
 

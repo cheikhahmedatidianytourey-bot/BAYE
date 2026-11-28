@@ -26,6 +26,7 @@ import { inspectBuildTestRequest } from './project-build-test-api.js';
 import { getOwnedModelDevelopmentStatus, inspectOwnedModelTrainingRequest } from './ai/owned-model-development-api.js';
 import { inspectTextForVerification, getVerificationEngineStatus } from './ai/verification-engine.js';
 import { validateDatasetRecord, getDataEngineStatus } from './ai/data-engine.js';
+import { inspectDatasetBatch, getDataQualityPipelineStatus } from './ai/data-quality-pipeline.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -50,7 +51,8 @@ app.get('/', (_req,res)=>res.type('text').send('BAYE AI CORE — Gateway online.
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo(),independentCore:getIndependentCoreStatus()}));
 app.get('/api/owned-models/status', (_req,res)=>res.json(getOwnedModelDevelopmentStatus()));
 app.get('/api/verification/status', (_req,res)=>res.json(getVerificationEngineStatus()));
-app.get('/api/data-engine/status', (_req,res)=>res.json(getDataEngineStatus()));
+app.get('/api/data-engine/status', (_req,res)=>res.json({...getDataEngineStatus(),qualityPipeline:getDataQualityPipelineStatus()}));
+app.post('/api/data-engine/quality/inspect', generationLimiter, (req,res)=>{const result=inspectDatasetBatch(req.body);if(result.status==='rejected')return res.status(400).json(result);res.status(200).json(result);});
 app.post('/api/data-engine/dataset/validate', generationLimiter, (req,res)=>{const result=validateDatasetRecord(req.body);if(!result.valid)return res.status(400).json(result);res.status(202).json(result);});
 app.post('/api/verification/inspect', generationLimiter, (req,res)=>{const result=inspectTextForVerification(req.body);if(result.status==='rejected')return res.status(400).json(result);res.status(200).json(result);});
 app.post('/api/owned-models/training-plan', generationLimiter, (req,res)=>{const result=inspectOwnedModelTrainingRequest(req.body);if(result.status==='rejected')return res.status(400).json(result);res.status(202).json(result);});

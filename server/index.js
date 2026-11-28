@@ -23,6 +23,7 @@ import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
 import { validateAppBuilderPrompt, parseGeneratedProject, buildAppBuilderInstruction } from './app-builder.js';
 import { inspectBuildTestRequest } from './project-build-test-api.js';
+import { getOwnedModelDevelopmentStatus, inspectOwnedModelTrainingRequest } from './ai/owned-model-development-api.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -45,6 +46,8 @@ const mediaLimiter=rateLimit({windowMs:60_000,max:5,standardHeaders:true,legacyH
 const mediaStatusLimiter=rateLimit({windowMs:60_000,max:30,standardHeaders:true,legacyHeaders:false,message:{error:'Trop de vérifications média. Réessaie dans une minute.'}});
 app.get('/', (_req,res)=>res.type('text').send('BAYE AI CORE — Gateway online. Use /health for system status.'));
 app.get('/health', (_req,res)=>res.json({status:'ok',service:'BAYE AI gateway',core:getCoreInfo(),independentCore:getIndependentCoreStatus()}));
+app.get('/api/owned-models/status', (_req,res)=>res.json(getOwnedModelDevelopmentStatus()));
+app.post('/api/owned-models/training-plan', generationLimiter, (req,res)=>{const result=inspectOwnedModelTrainingRequest(req.body);if(result.status==='rejected')return res.status(400).json(result);res.status(202).json(result);});
 app.get('/api/operational-audit',(req,res)=>{const secret=process.env.BAYE_MONITOR_SECRET;if(typeof secret!=='string'||secret.length<32)return res.status(503).json({error:'Audit access secret is not securely configured'});if(!secureBearerMatch(req,secret))return res.status(401).json({error:'Unauthorized'});res.json(buildOperationalAudit());});
 app.get('/api/independent-core/status',(_req,res)=>res.json(getIndependentCoreStatus()));
 app.post('/api/independent-core/runtime',generationLimiter,(req,res)=>{try{res.json(runOwnedRuntime(req.body?.input));}catch(err){res.status(400).json({error:err.message||'Entrée invalide.'});}});

@@ -128,7 +128,7 @@ test('integrates watchdog with the real G93 health monitor and evidence replicat
   try {
     const bytes = Buffer.from([
       JSON.stringify(createChainEntry(Buffer.from('real G93 integration'), { commit: { sha: 'a'.repeat(40) } }, ZERO_HASH, 1, 'evidence-1.json'))
-    ].join('') + '\\n');
+    ].join('') + '\n');
     fs.writeFileSync(f.primaryLedgerFile, bytes);
     fs.writeFileSync(f.replicaLedgerFile, bytes);
     persistDurableCheckpoint(f.dirs.primary, bytes);

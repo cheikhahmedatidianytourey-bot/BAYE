@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {inspectTextForVerification,getVerificationEngineStatus} from '../server/ai/verification-engine.js';
+test('rejects empty, malformed and oversized inputs',()=>{assert.equal(inspectTextForVerification(null).status,'rejected');assert.equal(inspectTextForVerification({text:' '}).status,'rejected');assert.equal(inspectTextForVerification({text:'x'.repeat(12001)}).status,'rejected');});
+test('flags guarantee-like language without claiming factual verification',()=>{const r=inspectTextForVerification({text:'This is guaranteed and always perfect.'});assert.equal(r.status,'inspected');assert.ok(r.inspection.flags.some(x=>x.id==='absolute-certainty'));assert.match(r.scope,/no factual verification/);});
+test('flags source claims and absence of visible source markers',()=>{const r=inspectTextForVerification({text:'This is verified and confirmed.'});assert.ok(r.inspection.flags.some(x=>x.id==='unsupported-source-claim'));assert.ok(r.inspection.flags.some(x=>x.id==='no-visible-source-markers'));});
+test('source marker signal and uncertain language are reported',()=>{const r=inspectTextForVerification({text:'This might be true, see https://example.com'});assert.equal(r.inspection.uncertaintySignals,1);assert.ok(r.inspection.visibleSourceMarkers>0);});
+test('status honestly describes limitations',()=>{const s=getVerificationEngineStatus();assert.equal(s.factChecking,'not-implemented');assert.equal(s.executionEnabled,false);});

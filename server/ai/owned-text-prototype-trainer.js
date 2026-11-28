@@ -2,7 +2,7 @@
 // This is an experimental baseline, not a general-purpose language model.
 // It uses caller-supplied bounded samples only; no network, filesystem, or external model.
 const MAX_SAMPLES=600,MAX_TEXT=2000,MAX_LABELS=8,MAX_VOCAB=12000;
-const tokenize=text=>text.toLowerCase().match(/[\\p{L}\\p{N}]+/gu)?.slice(0,300)||[];
+const tokenize=text=>text.toLowerCase().match(/[\p{L}\p{N}]+/gu)?.slice(0,300)||[];
 function validateSplit(split,name){
  if(!Array.isArray(split)||split.length<1||split.length>MAX_SAMPLES)return {error:name+' split must contain 1–600 samples.'};
  const clean=[];

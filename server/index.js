@@ -60,6 +60,9 @@ app.get('/api/training-experiments/config/status', (_req,res)=>res.json(getTrain
 import { inspectComputeResources, planComputeDispatch, getComputeWorkerStatus } from './ai/compute-worker-planner.js';
 app.get('/api/training-engine/status', (_req,res)=>res.json(getTrainingEngineStatus()));
 import { enqueueControlledTask, updateControlledTaskStage, getControlledTask, listControlledTasks, getControlledTaskQueueStatus } from './ai/controlled-task-queue.js';
+import { inspectExecutionGate, getExecutionGateStatus } from './ai/controlled-execution-gate.js';
+app.get('/api/execution-gate/status',(_req,res)=>res.json(getExecutionGateStatus()));
+app.post('/api/execution-gate/inspect',generationLimiter,(req,res)=>{const result=inspectExecutionGate(req.body);if(result.status==='rejected')return res.status(400).json(result);if(result.status==='blocked')return res.status(422).json(result);res.json(result);});
 app.get('/api/compute-worker/status',(_req,res)=>res.json(getComputeWorkerStatus()));
 app.get('/api/controlled-task-queue/status',(_req,res)=>res.json(getControlledTaskQueueStatus()));
 app.post('/api/controlled-task-queue/tasks',generationLimiter,(req,res)=>{const result=enqueueControlledTask(req.body);if(result.status==='rejected')return res.status(400).json(result);if(result.status==='capacity')return res.status(503).json(result);res.status(201).json(result);});

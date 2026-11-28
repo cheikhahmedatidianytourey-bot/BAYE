@@ -14,6 +14,7 @@ const PLAN = '1c-2g';
 
 const PREFLIGHT_SCRIPT = String.raw`import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 const root = '/workspace/BAYE';
@@ -29,6 +30,27 @@ const actualCommit = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encodi
 if (actualCommit.status !== 0 || actualCommit.stdout.trim() !== expectedCommit) fail('snapshot commit does not match the trusted expected BAYE revision');
 const gitStatus = spawnSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, encoding: 'utf8' });
 if (gitStatus.status !== 0 || gitStatus.stdout.trim()) fail('snapshot checkout must be clean');
+// Verify critical checkout bytes against the immutable Git tree selected by G85.
+// Git blob IDs bind each file to HEAD; SHA-256 fingerprints are emitted as bounded evidence.
+const criticalFiles = [
+  'package.json',
+  'server/ai/render-sandbox-adapter.js',
+  'server/ai/controlled-repair-gate.js',
+  'server/ai/repair-sandbox-runner.js'
+];
+const fingerprints = [];
+for (const relative of criticalFiles) {
+  const absolute = path.join(root, relative);
+  let stat;
+  try { stat = fs.lstatSync(absolute); } catch { fail('critical snapshot file is missing: ' + relative); }
+  if (!stat.isFile() || fs.realpathSync(absolute) !== absolute) fail('critical snapshot file is not a regular in-tree file: ' + relative);
+  const committed = spawnSync('git', ['rev-parse', 'HEAD:' + relative], { cwd: root, encoding: 'utf8' });
+  if (committed.status !== 0 || !/^[a-f0-9]{40,64}$/.test(committed.stdout.trim())) fail('critical snapshot file is not tracked by the pinned commit: ' + relative);
+  const actual = spawnSync('git', ['hash-object', '--no-filters', '--', relative], { cwd: root, encoding: 'utf8' });
+  if (actual.status !== 0 || actual.stdout.trim() !== committed.stdout.trim()) fail('critical snapshot file content differs from the pinned Git tree: ' + relative);
+  const digest = createHash('sha256').update(fs.readFileSync(absolute)).digest('hex');
+  fingerprints.push(relative + '=' + digest);
+}
 const nodeMajor = Number(process.versions.node.split('.')[0]);
 if (nodeMajor !== 24) fail('Node.js 24 is required');
 const npm = spawnSync('npm', ['--version'], { cwd: root, encoding: 'utf8', timeout: 5000 });
@@ -55,7 +77,7 @@ function inspect(directory, relative = '') {
 }
 inspect(root);
 if (forbidden.length) fail('snapshot contains forbidden secret-like files: ' + forbidden.slice(0, 5).join(', '));
-process.stdout.write('BAYE snapshot preflight passed: clean checkout, Node 24, npm, dependencies and required scripts present; no secret-like files found\n');
+process.stdout.write('BAYE snapshot preflight passed: pinned commit and critical file fingerprints verified, clean checkout, Node 24, npm, dependencies and required scripts present; no secret-like files found\n' + fingerprints.join('\n') + '\n');
 `;
 
 const APPLY_SCRIPT = String.raw`import fs from 'node:fs';
@@ -331,7 +353,7 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
 export function getRenderSandboxAdapterStatus() {
   return {
     name: 'BAYE Render Sandbox Adapter',
-    milestone: 'G85',
+    milestone: 'G86',
     provider: 'Render Sandboxes',
     sdkVersion: '1.11.0',
     mode: 'pinned snapshot; disposable microVM per validation',

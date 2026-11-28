@@ -71,11 +71,31 @@ test('creates a deny-all disposable Render sandbox from the pinned snapshot and 
     networkPolicy: { type: 'deny-all' }
   });
   assert.equal(Object.hasOwn(calls.create[0], 'env'), false);
-  assert.equal(calls.uploads.length, 2);
+  assert.equal(calls.uploads.length, 3);
+  assert.equal(calls.uploads[0].path, '/tmp/baye-snapshot-preflight.mjs');
+  assert.equal(calls.commands[0].command, 'timeout -k 2 10s node /tmp/baye-snapshot-preflight.mjs');
+  assert.ok(calls.commands.findIndex(item => item.command.includes('baye-snapshot-preflight')) < calls.commands.findIndex(item => item.command.includes('baye-apply-repair')));
   assert.equal(calls.uploads.some(file => file.data.toString('utf8').includes(env.RENDER_API_KEY)), false);
   assert.equal(calls.commands.some(item => item.command.includes('npm test')), true);
   assert.equal(calls.commands.some(item => item.command.includes('npm run build')), true);
   assert.equal(calls.commands.some(item => /node -e|curl |wget /.test(item.command)), false);
+});
+
+test('refuses an unready pinned snapshot before uploading or applying a repair patch', async () => {
+  const { client, calls } = fakeClient({
+    exitCodes: { 'node /tmp/baye-snapshot-preflight.mjs': 1 }
+  });
+  const adapter = createRenderSandboxAdapter({ client, env });
+  const result = await adapter.run({ proposal, checks, limits, signal: new AbortController().signal });
+
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /pinned BAYE snapshot is not ready/);
+  assert.equal(result.cleanupStatus, 'terminated');
+  assert.equal(calls.uploads.length, 1);
+  assert.equal(calls.uploads[0].path, '/tmp/baye-snapshot-preflight.mjs');
+  assert.equal(calls.commands.length, 1);
+  assert.equal(calls.commands[0].command, 'timeout -k 2 10s node /tmp/baye-snapshot-preflight.mjs');
+  assert.deepEqual(calls.terminated, ['sbx-test-123']);
 });
 
 test('does not create a sandbox for unsupported security checks', async () => {
@@ -135,7 +155,7 @@ test('rejects unsafe patch targets before creating a sandbox', async () => {
 
 test('documents provider limits, credentials and currently supported checks', () => {
   const status = getRenderSandboxAdapterStatus();
-  assert.equal(status.milestone, 'G83');
+  assert.equal(status.milestone, 'G84');
   assert.equal(status.sdkVersion, '1.11.0');
   assert.equal(status.networkPolicy, 'deny-all');
   assert.equal(status.memoryLimitMb, 2048);

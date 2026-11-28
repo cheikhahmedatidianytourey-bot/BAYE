@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {ingestFaultAnalysis,listFaultIncidents,resolveFaultIncident,getIncidentTrackingStatus} from './incident-tracker.js';
+test('G71 records and updates incident occurrences',()=>{const a={status:'analyzed',results:[{path:'/x',classification:{category:'timeout',severity:'major',detail:'timeout'}}]};const first=ingestFaultAnalysis(a);assert.equal(first.created.length,1);const second=ingestFaultAnalysis(a);assert.equal(second.updated.length,1);assert.equal(listFaultIncidents().items[0].occurrences,2);});
+test('G71 supports filtering by severity and status',()=>{assert.equal(listFaultIncidents({severity:'major',status:'open'}).items.length,1);});
+test('G71 resolves tracked incident',()=>{const id=listFaultIncidents().items[0].id;assert.equal(resolveFaultIncident(id).status,'resolved');assert.equal(listFaultIncidents({status:'open'}).items.length,0);});
+test('G71 rejects missing incident and invalid reason',()=>{assert.equal(resolveFaultIncident('absent').status,'not-found');const id=listFaultIncidents({status:'resolved'}).items[0].id;assert.equal(resolveFaultIncident(id,'x'.repeat(301)).status,'rejected');});
+test('G71 status accurately states volatile storage',()=>{const s=getIncidentTrackingStatus();assert.equal(s.persistent,false);assert.equal(s.storage,'in-memory');});

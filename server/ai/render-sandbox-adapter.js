@@ -12,6 +12,49 @@ const APPLY_TIMEOUT_SECONDS = 15;
 const SANDBOX_LIFETIME_SECONDS = 300;
 const PLAN = '1c-2g';
 
+const PREFLIGHT_SCRIPT = String.raw`import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+const root = '/workspace/BAYE';
+function fail(message) {
+  process.stderr.write('BAYE snapshot preflight failed: ' + message + '\\n');
+  process.exit(1);
+}
+if (!fs.existsSync(root) || fs.realpathSync(root) !== root) fail('expected project root is missing or redirected');
+const gitRoot = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' });
+if (gitRoot.status !== 0 || gitRoot.stdout.trim() !== root) fail('snapshot is not a valid BAYE Git checkout');
+const gitStatus = spawnSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, encoding: 'utf8' });
+if (gitStatus.status !== 0 || gitStatus.stdout.trim()) fail('snapshot checkout must be clean');
+const nodeMajor = Number(process.versions.node.split('.')[0]);
+if (nodeMajor !== 24) fail('Node.js 24 is required');
+const npm = spawnSync('npm', ['--version'], { cwd: root, encoding: 'utf8', timeout: 5000 });
+if (npm.status !== 0 || !/^\\d+\\.\\d+\\.\\d+/.test((npm.stdout || '').trim())) fail('npm is unavailable');
+const packagePath = path.join(root, 'package.json');
+if (!fs.existsSync(packagePath)) fail('package.json is missing');
+const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+if (pkg.engines?.node !== '24.x') fail('package.json must require Node.js 24.x');
+for (const script of ['test', 'build', 'test:security']) {
+  if (typeof pkg.scripts?.[script] !== 'string' || !pkg.scripts[script].trim()) fail('required npm script is missing: ' + script);
+}
+if (!fs.existsSync(path.join(root, 'node_modules')) || !fs.statSync(path.join(root, 'node_modules')).isDirectory()) {
+  fail('preinstalled node_modules directory is missing');
+}
+const forbidden = [];
+function inspect(directory, relative = '') {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (['.git', 'node_modules', 'dist', 'coverage'].includes(entry.name)) continue;
+    const rel = relative ? relative + '/' + entry.name : entry.name;
+    if (/^\\.env(?:$|\\.)/i.test(entry.name) && !/^\\.env\\.(?:example|sample|template)$/i.test(entry.name)) forbidden.push(rel);
+    if (/^(?:id_rsa|id_ed25519|.*\\.(?:pem|key|p12|pfx))$/i.test(entry.name)) forbidden.push(rel);
+    if (entry.isDirectory()) inspect(path.join(directory, entry.name), rel);
+  }
+}
+inspect(root);
+if (forbidden.length) fail('snapshot contains forbidden secret-like files: ' + forbidden.slice(0, 5).join(', '));
+process.stdout.write('BAYE snapshot preflight passed: clean checkout, Node 24, npm, dependencies and required scripts present; no secret-like files found\\n');
+`;
+
 const APPLY_SCRIPT = String.raw`import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
@@ -169,6 +212,23 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
         await sandboxes.waitUntilRunning(sandboxId, { timeoutMs: 60_000, signal });
         await sandboxes.upload(
           sandboxId,
+          '/tmp/baye-snapshot-preflight.mjs',
+          Buffer.from(PREFLIGHT_SCRIPT, 'utf8'),
+          undefined,
+          { signal }
+        );
+        const preflight = await execute(
+          sandboxes,
+          sandboxId,
+          'timeout -k 2 10s node /tmp/baye-snapshot-preflight.mjs',
+          signal
+        );
+        if (preflight.exitCode !== 0) {
+          throw new Error('pinned BAYE snapshot is not ready: ' + bounded(preflight.output));
+        }
+
+        await sandboxes.upload(
+          sandboxId,
           '/tmp/baye-repair-manifest.json',
           Buffer.from(JSON.stringify(changes), 'utf8'),
           undefined,
@@ -261,7 +321,7 @@ export function createRenderSandboxAdapter({ client, env = process.env } = {}) {
 export function getRenderSandboxAdapterStatus() {
   return {
     name: 'BAYE Render Sandbox Adapter',
-    milestone: 'G83',
+    milestone: 'G84',
     provider: 'Render Sandboxes',
     sdkVersion: '1.11.0',
     mode: 'pinned snapshot; disposable microVM per validation',

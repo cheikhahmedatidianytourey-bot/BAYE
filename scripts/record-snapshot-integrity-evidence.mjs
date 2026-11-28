@@ -41,12 +41,25 @@ try {
   manifestError = bounded(error?.message || error, 500);
 }
 
+const allowedEvidencePaths = new Set([
+  'package.json',
+  'server/ai/render-sandbox-adapter.js',
+  'server/ai/controlled-repair-gate.js',
+  'server/ai/repair-sandbox-runner.js',
+  'scripts/verify-snapshot-integrity.mjs'
+]);
 const fileEvidence = [];
 if (Array.isArray(manifest?.files)) {
   for (const item of manifest.files) {
-    const entry = { path: bounded(item?.path, 300), expectedSha256: item?.sha256 || null, actualSha256: null, matches: false };
+    const relative = typeof item?.path === 'string' ? item.path : '';
+    const entry = { path: bounded(relative, 300), expectedSha256: item?.sha256 || null, actualSha256: null, matches: false };
+    if (!allowedEvidencePaths.has(relative)) {
+      entry.error = 'path is outside the approved integrity evidence scope';
+      fileEvidence.push(entry);
+      continue;
+    }
     try {
-      const bytes = fs.readFileSync(path.join(root, item.path));
+      const bytes = fs.readFileSync(path.join(root, relative));
       entry.actualSha256 = sha256(bytes);
       entry.matches = entry.actualSha256 === item.sha256;
     } catch (error) {

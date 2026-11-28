@@ -22,6 +22,7 @@ import { createVideoSubmitHandler, createVideoStatusHandler } from './ai/video-r
 import { buildOperationalAudit } from './operational-audit.js';
 import { buildStudioInstruction } from './studio-engine.js';
 import { validateAppBuilderPrompt, parseGeneratedProject, buildAppBuilderInstruction } from './app-builder.js';
+import { inspectBuildTestRequest } from './project-build-test-api.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -160,6 +161,14 @@ async function callAI({key,endpoint,model,messages,max_tokens=4096,temperature=0
     temperature
   });
 }
+// Safe build-test API: preflight only; isolated execution remains unavailable unless explicitly wired.
+app.post('/api/projects/build-test', generationLimiter, async (req,res)=>{
+  try{
+    const result=await inspectBuildTestRequest(req.body?.files);
+    res.status(result.passed?200:422).json(result);
+  }catch(_err){res.status(400).json({passed:false,stage:'request',issues:[{code:'INVALID_BUILD_TEST_REQUEST'}],executionEnabled:false});}
+});
+
 // Functional MVP app builder: generates a bounded file manifest, but never executes it.
 app.post('/api/projects/generate', generationLimiter, enforceFreeQuota('text'), async (req,res)=>{
   try{

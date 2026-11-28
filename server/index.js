@@ -62,7 +62,12 @@ app.get('/api/training-engine/status', (_req,res)=>res.json(getTrainingEngineSta
 import { enqueueControlledTask, updateControlledTaskStage, getControlledTask, listControlledTasks, getControlledTaskQueueStatus } from './ai/controlled-task-queue.js';
 import { inspectExecutionGate, getExecutionGateStatus } from './ai/controlled-execution-gate.js';
 import { buildReleaseReadinessReport } from './ai/release-readiness.js';
+import { recordManualTest, listManualTests, getManualTest, getManualTestLedgerStatus } from './ai/manual-test-evidence-ledger.js';
 app.get('/api/release-readiness',(_req,res)=>res.json(buildReleaseReadinessReport({core:getCoreInfo(),independentCore:getIndependentCoreStatus(),provider:getAIProviderStatus(),media:getMediaProviderStatus(),monitor:getMonitorStatus(),workflow:getWorkflowLimits(),tools:getSafeToolCatalog(),executionGate:getExecutionGateStatus()})));
+app.get('/api/manual-tests/evidence/status',generationLimiter,(_req,res)=>res.json(getManualTestLedgerStatus()));
+app.get('/api/manual-tests/evidence',generationLimiter,(req,res)=>res.json(listManualTests({featureId:typeof req.query.featureId==='string'?req.query.featureId:'',outcome:typeof req.query.outcome==='string'?req.query.outcome:'',limit:Number(req.query.limit)||50})));
+app.get('/api/manual-tests/evidence/:id',generationLimiter,(req,res)=>{const record=getManualTest(req.params.id);if(!record)return res.status(404).json({error:'Evidence record not found.'});res.json({record});});
+app.post('/api/manual-tests/evidence',generationLimiter,(req,res)=>{const result=recordManualTest(req.body);if(result.status==='rejected')return res.status(400).json(result);if(result.status==='capacity')return res.status(503).json(result);res.status(201).json(result);});
 app.get('/api/execution-gate/status',(_req,res)=>res.json(getExecutionGateStatus()));
 app.post('/api/execution-gate/inspect',generationLimiter,(req,res)=>{const result=inspectExecutionGate(req.body);if(result.status==='rejected')return res.status(400).json(result);if(result.status==='blocked')return res.status(422).json(result);res.json(result);});
 app.get('/api/compute-worker/status',(_req,res)=>res.json(getComputeWorkerStatus()));

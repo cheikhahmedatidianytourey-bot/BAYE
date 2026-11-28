@@ -129,7 +129,7 @@ test('rejects unsafe patch targets before creating a sandbox', async () => {
   };
   const result = await adapter.run({ proposal: unsafe, checks: ['unit-tests'], limits });
   assert.equal(result.status, 'failed');
-  assert.match(result.error, /unsupported path/);
+  assert.match(result.error, /repair proposal rejected/);
   assert.equal(calls.create.length, 0);
 });
 
